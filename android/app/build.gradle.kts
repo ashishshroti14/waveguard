@@ -98,7 +98,6 @@ dependencies {
     // TensorFlow Lite
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
-    implementation(libs.tensorflow.lite.task.audio)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
