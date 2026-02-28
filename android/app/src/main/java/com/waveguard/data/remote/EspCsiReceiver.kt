@@ -178,7 +178,6 @@ class EspCsiReceiver @Inject constructor(
             Log.i(TAG, "Closing EspCsiReceiver flow")
             leScanner?.stopScan(scanCallback)
             gatt?.apply {
-                @SuppressLint("MissingPermission")
                 disconnect()
                 close()
             }
