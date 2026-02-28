@@ -141,22 +141,25 @@ class RssiScanner @Inject constructor(
      * [WifiManager.connectionInfo] API which remains reliable through API 33.
      */
     @Suppress("DEPRECATION")
-    private fun connectedNetworkRssi(): RssiData? = try {
-        val info = wifiManager.connectionInfo ?: return null
-        val rssi = info.rssi
-        if (rssi <= WifiManager.RSSI_UNKNOWN || rssi < -100 || rssi > 0) return null
-        val rawSsid = info.ssid ?: return null
-        val ssid = rawSsid.trim('"')
-        if (ssid.isBlank() || ssid == "<unknown ssid>") return null
-        val bssid = info.bssid?.takeIf { it != "02:00:00:00:00:00" } ?: return null
-        RssiData(
-            timestamp = System.currentTimeMillis(),
-            bssid = bssid,
-            ssid = ssid,
-            rssi = rssi,
-            frequency = info.frequency
-        )
-    } catch (e: SecurityException) {
-        null
+    private fun connectedNetworkRssi(): RssiData? {
+        return try {
+            val info = wifiManager.connectionInfo ?: return null
+            val rssi = info.rssi
+            // RSSI value of Integer.MIN_VALUE means "no signal / not connected"
+            if (rssi == Integer.MIN_VALUE || rssi < -100 || rssi > 0) return null
+            val rawSsid = info.ssid ?: return null
+            val ssid = rawSsid.trim('"')
+            if (ssid.isBlank() || ssid == "<unknown ssid>") return null
+            val bssid = info.bssid?.takeIf { it != "02:00:00:00:00:00" } ?: return null
+            RssiData(
+                timestamp = System.currentTimeMillis(),
+                bssid = bssid,
+                ssid = ssid,
+                rssi = rssi,
+                frequency = info.frequency
+            )
+        } catch (e: SecurityException) {
+            null
+        }
     }
 }
