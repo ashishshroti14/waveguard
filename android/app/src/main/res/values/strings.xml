@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">WaveGuard</string>
+
+    <!-- Foreground service notification -->
+    <string name="service_notification_title">WaveGuard is monitoring</string>
+    <string name="service_notification_text">Presence detection is active in the background.</string>
+
+    <!-- Presence states -->
+    <string name="presence_unknown">Initializing…</string>
+    <string name="presence_empty">Room Empty</string>
+    <string name="presence_detected">Presence Detected</string>
+    <string name="presence_movement">Movement Detected</string>
+    <string name="presence_fall">Fall Detected!</string>
+
+    <!-- Alert types -->
+    <string name="alert_fall_detected">Fall Detected</string>
+    <string name="alert_presence_detected">Presence Detected</string>
+    <string name="alert_intrusion_suspected">Intrusion Suspected</string>
+    <string name="alert_unusual_activity">Unusual Activity</string>
+    <string name="alert_system_status">System Status</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">WaveGuard</string>
+    <string name="confidence_label">Confidence: %1$d%%</string>
+    <string name="signal_strength_label">Signal Strength</string>
+    <string name="recent_alerts_label">Recent Alerts</string>
+    <string name="no_recent_alerts">No recent alerts</string>
+    <string name="activity_label">Activity</string>
+    <string name="wifi_signal_label">Wi-Fi Signal</string>
+
+    <!-- Buttons / actions -->
+    <string name="action_start_monitoring">Start Monitoring</string>
+    <string name="action_stop_monitoring">Stop</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_acknowledge">Acknowledge</string>
+    <string name="action_view_details">View Details</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_scan_again">Scan Again</string>
+
+    <!-- Setup screen -->
+    <string name="setup_title">WaveGuard Setup</string>
+    <string name="setup_choose_mode">Choose how to run WaveGuard</string>
+    <string name="setup_esp32_subtitle">Best accuracy — requires WaveGuard ESP32 hardware</string>
+    <string name="setup_phone_only_title">Phone-Only Mode</string>
+    <string name="setup_phone_only_subtitle">Uses Wi-Fi RSSI only — no hardware required</string>
+    <string name="setup_skip">Skip Setup →</string>
+    <string name="setup_scanning">Scanning for WaveGuard ESP32…</string>
+    <string name="setup_connecting">Connecting to ESP32…</string>
+    <string name="setup_connection_failed">Connection failed</string>
+    <string name="setup_continue_calibration">Continue to Calibration</string>
+    <string name="setup_use_phone_only">Use Phone-Only Mode</string>
+
+    <!-- Calibration screen -->
+    <string name="calibration_title">Room Calibration</string>
+    <string name="calibration_heading">Calibrate Your Room</string>
+    <string name="calibration_step_1">Make sure the room is completely empty</string>
+    <string name="calibration_step_2">Place your device in the center of the room</string>
+    <string name="calibration_step_3">Keep the room still for 60 seconds</string>
+    <string name="calibration_step_4">WaveGuard will learn the baseline signal pattern</string>
+    <string name="calibration_accuracy_tip">Calibration improves detection accuracy significantly.</string>
+    <string name="calibration_start">Start Calibration</string>
+    <string name="calibration_skip">Skip for Now</string>
+    <string name="calibration_collecting">Collecting Baseline…</string>
+    <string name="calibration_do_not_move">Do not move around during calibration</string>
+    <string name="calibration_computing">Computing Baseline</string>
+    <string name="calibration_analyzing">Analyzing signal patterns…</string>
+    <string name="calibration_complete">Calibration Complete!</string>
+    <string name="calibration_optimized">WaveGuard is now optimized for your room.</string>
+    <string name="calibration_start_monitoring">Start Monitoring</string>
+    <string name="calibration_failed">Calibration Failed</string>
+    <string name="calibration_try_again">Try Again</string>
+    <string name="calibration_skip_calibration">Skip Calibration</string>
+
+    <!-- History screen -->
+    <string name="history_title">Alert History</string>
+    <string name="history_empty_title">No Alerts Yet</string>
+    <string name="history_empty_subtitle">When WaveGuard detects activity, alerts will appear here.</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_back">Back</string>
+    <string name="cd_alert_history">Alert History</string>
+    <string name="cd_settings">Settings</string>
+    <string name="cd_start_monitoring">Start Monitoring</string>
+    <string name="cd_stop_monitoring">Stop Monitoring</string>
+    <string name="cd_acknowledged">Acknowledged</string>
+    <string name="cd_waveguard_logo">WaveGuard Logo</string>
+</resources>
