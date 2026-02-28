@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/ESP32--S3-CSI%20Ready-orange.svg?logo=espressif" alt="ESP32-S3 CSI Ready"/>
   <img src="https://img.shields.io/badge/ML-WiFlexFormer-purple.svg" alt="ML: WiFlexFormer"/>
   <img src="https://img.shields.io/badge/privacy-no%20camera%20required-critical.svg" alt="Privacy: No Camera Required"/>
-  <img src="https://img.shields.io/badge/status-active%20development-yellow.svg" alt="Status: Active Development"/>
+  <a href="../../actions/workflows/build-apk.yml"><img src="https://github.com/ashishshroti14/waveguard/actions/workflows/build-apk.yml/badge.svg" alt="Build Debug APK"/></a>
 </p>
 
 <p align="center">
@@ -21,6 +21,7 @@
 
 ## Table of Contents
 
+- [📲 Get the APK](#-get-the-apk)
 - [Overview](#overview)
 - [Why WaveGuard?](#why-waveguard)
 - [Features](#features)
@@ -33,6 +34,28 @@
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## 📲 Get the APK
+
+> **Want to try it right now? No build tools needed.**
+
+Every commit automatically builds a debug APK via GitHub Actions.
+
+### Download in 3 steps
+
+1. Click **[Actions](../../actions/workflows/build-apk.yml)** → select the latest green ✅ run.
+2. Scroll to **Artifacts** at the bottom → click **`waveguard-debug-<N>`** to download a ZIP.
+3. Unzip → transfer `app-debug.apk` to your Android phone → tap to install.
+
+> Enable **"Install unknown apps"** for your file manager if prompted (Settings → Apps → Special app access).
+
+👉 See **[TESTING.md](TESTING.md)** for the complete step-by-step testing guide, including Phase 1 phone-only testing (no ESP32 required).
+
+### Trigger a manual build
+
+Go to **Actions → Build Debug APK → Run workflow** to kick off a fresh build on demand.
 
 ---
 
