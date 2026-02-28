@@ -1,5 +1,7 @@
 package com.waveguard.ui.screens.dashboard
 
+import android.content.Context
+import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.waveguard.data.model.ActivityType
@@ -8,7 +10,9 @@ import com.waveguard.data.model.PresenceState
 import com.waveguard.data.repository.AlertRepository
 import com.waveguard.data.repository.SensorRepository
 import com.waveguard.domain.detection.PresenceDetector
+import com.waveguard.service.WaveGuardService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +22,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val sensorRepository: SensorRepository,
     private val alertRepository: AlertRepository,
     private val presenceDetector: PresenceDetector
@@ -63,6 +68,20 @@ class DashboardViewModel @Inject constructor(
         if (_isMonitoring.value) return
         _isMonitoring.value = true
 
+        // Start the foreground service, which also wires up presenceDetector.start().
+        // PresenceDetector.start() is idempotent so the ViewModel calling it here is also safe.
+        val serviceIntent = WaveGuardService.startIntent(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
+        // Also wire detection pipeline directly so UI updates even when service hasn't started yet
+        presenceDetector.start(
+            rssiFlow = sensorRepository.rssiData,
+            csiFlow = sensorRepository.csiData
+        )
+
         // Collect RSSI stream and maintain rolling history of 60 samples
         monitoringJob = viewModelScope.launch {
             sensorRepository.rssiData.collect { rssiList ->
@@ -100,6 +119,7 @@ class DashboardViewModel @Inject constructor(
         monitoringJob?.cancel()
         monitoringJob = null
         _isMonitoring.value = false
+        context.startService(WaveGuardService.stopIntent(context))
     }
 
     override fun onCleared() {

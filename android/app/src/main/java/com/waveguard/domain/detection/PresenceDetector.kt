@@ -56,6 +56,8 @@ class PresenceDetector @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    @Volatile private var isStarted = false
+
     // -----------------------------------------------------------------------
     // Output flows
     // -----------------------------------------------------------------------
@@ -88,13 +90,16 @@ class PresenceDetector @Inject constructor(
     // -----------------------------------------------------------------------
 
     /**
-     * Starts the detection engine.  Must be called once (e.g., from the owning Service).
+     * Starts the detection engine.  Safe to call multiple times — subsequent calls are no-ops.
      * Data flows are supplied by the [SensorRepository] via the caller.
      */
     fun start(
         rssiFlow: Flow<List<RssiData>>,
         csiFlow: Flow<CsiData>
     ) {
+        if (isStarted) return
+        isStarted = true
+
         // Phase 1: Statistical detector (always active)
         scope.launch {
             statisticalDetector.analyze(rssiFlow)

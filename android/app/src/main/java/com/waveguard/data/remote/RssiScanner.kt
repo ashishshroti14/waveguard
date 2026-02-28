@@ -64,6 +64,9 @@ class RssiScanner @Inject constructor(
             context.registerReceiver(scanReceiver, filter)
         }
 
+        // Emit connected-network RSSI immediately so the UI reflects signal before first scan
+        connectedNetworkRssi()?.let { trySend(listOf(it)) }
+
         // Coroutine that periodically triggers new scans at ~2 Hz (500 ms).
         // Android throttles background scans; the receiver will still fire with cached results.
         val scanJob = launch {
@@ -96,11 +99,13 @@ class RssiScanner @Inject constructor(
     /**
      * Reads the latest scan results from [WifiManager] and converts them to [RssiData].
      * Filters out hidden SSIDs and invalid RSSI values (> 0 or < −100 dBm).
+     * Also merges in the currently connected network's live RSSI (covers hotspot scenarios
+     * where the AP may not appear in scan results due to scan throttling).
      */
     @Suppress("MissingPermission")
     private fun parseResults(): List<RssiData> {
         val now = System.currentTimeMillis()
-        return try {
+        val scanList = try {
             wifiManager.scanResults
                 ?.filter { result ->
                     !result.SSID.isNullOrBlank() &&
@@ -121,5 +126,37 @@ class RssiScanner @Inject constructor(
             Log.e(TAG, "Missing location permission required for Wi-Fi scan results", e)
             emptyList()
         }
+
+        // Merge in the connected network with its live RSSI
+        val connected = connectedNetworkRssi() ?: return scanList
+        val merged = scanList.toMutableList()
+        val idx = merged.indexOfFirst { it.bssid == connected.bssid }
+        if (idx >= 0) merged[idx] = connected else merged.add(0, connected)
+        return merged
+    }
+
+    /**
+     * Returns a [RssiData] entry for the currently associated Wi-Fi network, or null if the
+     * device is not connected or the RSSI value is invalid.  Uses the deprecated
+     * [WifiManager.connectionInfo] API which remains reliable through API 33.
+     */
+    @Suppress("DEPRECATION")
+    private fun connectedNetworkRssi(): RssiData? = try {
+        val info = wifiManager.connectionInfo ?: return null
+        val rssi = info.rssi
+        if (rssi <= WifiManager.RSSI_UNKNOWN || rssi < -100 || rssi > 0) return null
+        val rawSsid = info.ssid ?: return null
+        val ssid = rawSsid.trim('"')
+        if (ssid.isBlank() || ssid == "<unknown ssid>") return null
+        val bssid = info.bssid?.takeIf { it != "02:00:00:00:00:00" } ?: return null
+        RssiData(
+            timestamp = System.currentTimeMillis(),
+            bssid = bssid,
+            ssid = ssid,
+            rssi = rssi,
+            frequency = info.frequency
+        )
+    } catch (e: SecurityException) {
+        null
     }
 }
