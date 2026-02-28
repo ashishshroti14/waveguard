@@ -167,12 +167,23 @@ fun DashboardScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = presenceState.toDisplayName(),
+                        text = if (presenceState == PresenceState.UNKNOWN && !isMonitoring) {
+                            "Ready"
+                        } else {
+                            presenceState.toDisplayName()
+                        },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = presenceState.toColor()
                     )
-                    if (isMonitoring && confidence > 0f) {
+                    if (!isMonitoring && presenceState == PresenceState.UNKNOWN) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Tap Start Monitoring to begin",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    } else if (isMonitoring && confidence > 0f) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Confidence: ${(confidence * 100).toInt()}%",
