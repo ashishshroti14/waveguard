@@ -77,6 +77,9 @@ class PresenceDetector @Inject constructor(
     private val _confidence = MutableStateFlow(0f)
     val confidence: StateFlow<Float> = _confidence.asStateFlow()
 
+    /** 0.0–1.0 progress of the initial empty-room baseline calibration. */
+    val calibrationProgress: StateFlow<Float> = statisticalDetector.calibrationProgress
+
     // Latest values from each detector (updated by coroutines below)
     @Volatile private var latestStatistical = PresenceState.UNKNOWN
     @Volatile private var latestMl = PresenceState.UNKNOWN
@@ -99,6 +102,12 @@ class PresenceDetector @Inject constructor(
     ) {
         if (isStarted) return
         isStarted = true
+
+        // Auto-start baseline calibration the first time monitoring begins.
+        // Without this the statistical detector always returns UNKNOWN.
+        if (!statisticalDetector.isCalibrated.value) {
+            statisticalDetector.startCalibration()
+        }
 
         // Phase 1: Statistical detector (always active)
         scope.launch {

@@ -78,6 +78,7 @@ fun DashboardScreen(
     val confidence by viewModel.confidence.collectAsStateWithLifecycle()
     val isMonitoring by viewModel.isMonitoring.collectAsStateWithLifecycle()
     val rssiHistory by viewModel.rssiHistory.collectAsStateWithLifecycle()
+    val calibrationProgress by viewModel.calibrationProgress.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = NavyBackground,
@@ -162,15 +163,19 @@ fun DashboardScreen(
 
             // Presence label + confidence
             item {
+                val isCalibrating = isMonitoring &&
+                    presenceState == PresenceState.UNKNOWN &&
+                    calibrationProgress < 1f
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (presenceState == PresenceState.UNKNOWN && !isMonitoring) {
-                            "Ready"
-                        } else {
-                            presenceState.toDisplayName()
+                        text = when {
+                            presenceState == PresenceState.UNKNOWN && !isMonitoring -> "Ready"
+                            isCalibrating ->
+                                "Calibrating… ${(calibrationProgress * 100).toInt()}%"
+                            else -> presenceState.toDisplayName()
                         },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
@@ -180,6 +185,13 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Tap Start Monitoring to begin",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    } else if (isCalibrating) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Keep the room empty during calibration",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
