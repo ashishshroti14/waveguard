@@ -28,7 +28,9 @@ import javax.inject.Singleton
  * than 24 hours) are pruned on each new insertion to keep storage bounded.
  */
 private const val TAG = "SensorRepository"
- @Inject constructor(
+
+@Singleton
+class SensorRepository @Inject constructor(
     private val espCsiReceiver: EspCsiReceiver,
     private val rssiScanner: RssiScanner,
     private val csiDao: CsiDao

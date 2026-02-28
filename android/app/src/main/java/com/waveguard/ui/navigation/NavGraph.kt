@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.waveguard.ui.screens.calibration.CalibrationScreen
 import com.waveguard.ui.screens.dashboard.DashboardScreen
 import com.waveguard.ui.screens.history.HistoryScreen
@@ -16,6 +17,12 @@ object Routes {
     const val CALIBRATION = "calibration"
     const val HISTORY = "history"
     const val SETTINGS = "settings"
+}
+
+/** Entry-point composable used by [com.waveguard.MainActivity]. */
+@Composable
+fun NavGraph() {
+    WaveGuardNavGraph(navController = rememberNavController())
 }
 
 @Composable
