@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
@@ -20,6 +22,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "RssiScanner"
+private const val MIN_VALID_RSSI = -100
+private const val MAX_VALID_RSSI = 0
 
 /**
  * Continuously scans for nearby Wi-Fi access points and emits RSSI readings as a cold [Flow].
@@ -137,11 +141,19 @@ class RssiScanner @Inject constructor(
 
     /**
      * Returns a [RssiData] entry for the currently associated Wi-Fi network, or null if the
-     * device is not connected or the RSSI value is invalid.  Uses the deprecated
-     * [WifiManager.connectionInfo] API which remains reliable through API 33.
+     * device is not connected or the RSSI value is invalid.
+     *
+     * On Android 10+ (API 29) the primary source is [NetworkCapabilities.getSignalStrength],
+     * which does **not** require location permission and is immune to the BSSID/SSID
+     * privacy-redaction introduced in Android 12.  The deprecated [WifiManager.connectionInfo]
+     * API is kept as a fallback for older devices.
      */
     @Suppress("DEPRECATION")
     private fun connectedNetworkRssi(): RssiData? {
+        // Android 10+: prefer NetworkCapabilities – no location permission needed.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            networkCapabilitiesRssi()?.let { return it }
+        }
         return try {
             val info = wifiManager.connectionInfo ?: return null
             val rssi = info.rssi
@@ -159,6 +171,32 @@ class RssiScanner @Inject constructor(
                 frequency = info.frequency
             )
         } catch (e: SecurityException) {
+            null
+        }
+    }
+
+    /**
+     * Reads the current Wi-Fi RSSI via [NetworkCapabilities.getSignalStrength] (API 29+).
+     * This works without location permission, avoiding the privacy-redaction on Android 12+.
+     */
+    @Suppress("NewApi") // guarded by SDK_INT check in the only caller
+    private fun networkCapabilitiesRssi(): RssiData? {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return null
+            val network = cm.activeNetwork ?: return null
+            val caps = cm.getNetworkCapabilities(network) ?: return null
+            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
+            val rssi = caps.signalStrength
+            if (rssi == Int.MIN_VALUE || rssi < MIN_VALID_RSSI || rssi > MAX_VALID_RSSI) return null
+            RssiData(
+                timestamp = System.currentTimeMillis(),
+                bssid = "active_ap",
+                ssid = "Connected",
+                rssi = rssi,
+                frequency = 0
+            )
+        } catch (e: Exception) {
             null
         }
     }

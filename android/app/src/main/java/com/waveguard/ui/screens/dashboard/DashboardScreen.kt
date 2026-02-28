@@ -235,7 +235,7 @@ fun DashboardScreen(
                                 color = TextPrimary
                             )
                             Text(
-                                text = "${signalStrength.toInt()} dBm",
+                                text = if (signalStrength < 0f) "${signalStrength.toInt()} dBm" else "-- dBm",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = CyanActive
                             )
@@ -357,7 +357,7 @@ private fun RoomStatusRow(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${signalStrength.toInt()} dBm",
+                    text = if (signalStrength < 0f) "${signalStrength.toInt()} dBm" else "-- dBm",
                     style = MaterialTheme.typography.bodySmall,
                     color = CyanActive,
                     fontWeight = FontWeight.Medium

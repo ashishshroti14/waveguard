@@ -18,7 +18,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,6 +54,9 @@ class PresenceDetector @Inject constructor(
         private const val WEIGHT_ML = 0.60f
         private const val WEIGHT_STATISTICAL = 0.25f
         private const val WEIGHT_ANOMALY = 0.15f
+
+        // Confidence assigned when calibration completes with no active detections
+        private const val DEFAULT_EMPTY_STATE_CONFIDENCE = 0.5f
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -174,6 +179,22 @@ class PresenceDetector @Inject constructor(
                 .onEach { isAnomaly -> latestAnomaly = isAnomaly }
                 .catch { }
                 .collect()
+        }
+
+        // Emit EMPTY once calibration completes so the UI exits "Initializing…" even
+        // if no RSSI data has arrived (e.g. all scans throttled by Android).
+        scope.launch {
+            statisticalDetector.isCalibrated
+                .filter { it }
+                .take(1)
+                .collect {
+                    if (_presenceState.replayCache.isEmpty() ||
+                        _presenceState.replayCache.last() == PresenceState.UNKNOWN
+                    ) {
+                        _presenceState.emit(PresenceState.EMPTY)
+                        _confidence.value = DEFAULT_EMPTY_STATE_CONFIDENCE
+                    }
+                }
         }
     }
 

@@ -2,6 +2,13 @@ package com.waveguard.domain.detection
 
 import com.waveguard.data.model.PresenceState
 import com.waveguard.data.model.RssiData
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,7 +50,7 @@ class StatisticalDetector @Inject constructor() {
     // Calibration accumulation: bssid → list of RSSI samples during the 60-s window
     private val calibrationSamples = mutableMapOf<String, MutableList<Float>>()
     private var calibrationStartMs = 0L
-    private var isCalibrating = false
+    @Volatile private var isCalibrating = false
 
     // -----------------------------------------------------------------------
     // Constants
@@ -75,6 +82,9 @@ class StatisticalDetector @Inject constructor() {
 
     private val rollingState = mutableMapOf<String, RollingState>()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var calibrationJob: Job? = null
+
     // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
@@ -85,11 +95,27 @@ class StatisticalDetector @Inject constructor() {
      * transitions to `true`.
      */
     fun startCalibration() {
+        calibrationJob?.cancel()
         calibrationSamples.clear()
         calibrationStartMs = System.currentTimeMillis()
         isCalibrating = true
         _calibrationProgress.value = 0f
         _isCalibrated.value = false
+
+        // Drive progress every second so the UI always advances even when Android
+        // throttles Wi-Fi scans and no RSSI data arrives.
+        calibrationJob = scope.launch {
+            val start = calibrationStartMs
+            while (isActive) {
+                delay(1_000L)
+                val elapsed = System.currentTimeMillis() - start
+                _calibrationProgress.value = (elapsed.toFloat() / CALIBRATION_WINDOW_MS).coerceIn(0f, 1f)
+                if (elapsed >= CALIBRATION_WINDOW_MS) {
+                    finishCalibration()
+                    break
+                }
+            }
+        }
     }
 
     /**
@@ -101,7 +127,7 @@ class StatisticalDetector @Inject constructor() {
             .runningFold(emptyList<RssiData>() to PresenceState.UNKNOWN) { (_, _), samples ->
                 val nowMs = System.currentTimeMillis()
                 if (isCalibrating) {
-                    feedCalibration(samples, nowMs)
+                    feedCalibration(samples)
                 }
                 val state = if (_isCalibrated.value) detect(samples, nowMs) else PresenceState.UNKNOWN
                 samples to state
@@ -112,16 +138,9 @@ class StatisticalDetector @Inject constructor() {
     // Calibration helpers
     // -----------------------------------------------------------------------
 
-    private fun feedCalibration(samples: List<RssiData>, nowMs: Long) {
-        val elapsed = nowMs - calibrationStartMs
-        _calibrationProgress.value = (elapsed.toFloat() / CALIBRATION_WINDOW_MS).coerceIn(0f, 1f)
-
+    private fun feedCalibration(samples: List<RssiData>) {
         for (entry in samples) {
             calibrationSamples.getOrPut(entry.bssid) { mutableListOf() }.add(entry.rssi.toFloat())
-        }
-
-        if (elapsed >= CALIBRATION_WINDOW_MS) {
-            finishCalibration()
         }
     }
 
