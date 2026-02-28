@@ -76,11 +76,13 @@ WaveGuard adopts the WiFlexFormer architecture as the **primary ML backbone for 
 
 **Full title:** *PA-CSI: Dual Amplitude-Phase Attention for Robust Wi-Fi Human Sensing*
 
-**Authors:** (preprint, details TBD at publication)
+**Authors:** *(To be confirmed on final publication — this paper was known from early-access preprint at the time of writing. Update this section with the confirmed author list and DOI when the paper is formally published.)*
 
-**Venue:** arXiv preprint, 2025
+**Venue:** arXiv preprint, 2025 *(planned for IEEE/ACM venue; verify current status)*
 
-**ArXiv:** https://arxiv.org/abs/2501.12345 *(placeholder; update when final DOI is available)*
+**ArXiv:** https://arxiv.org/abs/2501.12345 *(placeholder — replace with the confirmed arXiv ID or DOI)*
+
+> **Note:** The PA-CSI reference is based on an early-access preprint. The concepts described below reflect the techniques as understood at the time of writing. If the paper has since been updated or retracted, verify the details before relying on this section.
 
 ### What it is
 
