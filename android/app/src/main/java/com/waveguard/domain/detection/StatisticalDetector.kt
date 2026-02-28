@@ -43,6 +43,14 @@ class StatisticalDetector @Inject constructor() {
     private val _calibrationProgress = MutableStateFlow(0f)
     val calibrationProgress: StateFlow<Float> = _calibrationProgress.asStateFlow()
 
+    /** Number of RSSI samples collected so far during calibration. */
+    private val _calibrationSampleCount = MutableStateFlow(0)
+    val calibrationSampleCount: StateFlow<Int> = _calibrationSampleCount.asStateFlow()
+
+    /** True when calibration completed but no Wi-Fi data was received. */
+    private val _calibrationFailed = MutableStateFlow(false)
+    val calibrationFailed: StateFlow<Boolean> = _calibrationFailed.asStateFlow()
+
     // Baseline statistics: bssid → (mean, variance)
     private val baselineMean = mutableMapOf<String, Float>()
     private val baselineVariance = mutableMapOf<String, Float>()
@@ -101,6 +109,8 @@ class StatisticalDetector @Inject constructor() {
         isCalibrating = true
         _calibrationProgress.value = 0f
         _isCalibrated.value = false
+        _calibrationSampleCount.value = 0
+        _calibrationFailed.value = false
 
         // Drive progress every second so the UI always advances even when Android
         // throttles Wi-Fi scans and no RSSI data arrives.
@@ -142,10 +152,20 @@ class StatisticalDetector @Inject constructor() {
         for (entry in samples) {
             calibrationSamples.getOrPut(entry.bssid) { mutableListOf() }.add(entry.rssi.toFloat())
         }
+        _calibrationSampleCount.value = calibrationSamples.values.sumOf { it.size }
     }
 
     private fun finishCalibration() {
         isCalibrating = false
+
+        // If no RSSI samples were collected, calibration cannot succeed — the device
+        // likely has no Wi-Fi connection.  Signal this to the UI instead of pretending.
+        if (calibrationSamples.isEmpty()) {
+            _calibrationProgress.value = 1f
+            _calibrationFailed.value = true
+            return
+        }
+
         for ((bssid, values) in calibrationSamples) {
             if (values.size < 2) continue
             val mean = values.average().toFloat()

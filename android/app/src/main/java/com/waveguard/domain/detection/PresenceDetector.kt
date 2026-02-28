@@ -85,6 +85,12 @@ class PresenceDetector @Inject constructor(
     /** 0.0–1.0 progress of the initial empty-room baseline calibration. */
     val calibrationProgress: StateFlow<Float> = statisticalDetector.calibrationProgress
 
+    /** Number of RSSI samples collected during calibration. */
+    val calibrationSampleCount: StateFlow<Int> = statisticalDetector.calibrationSampleCount
+
+    /** True when calibration finished but zero Wi-Fi data was received. */
+    val calibrationFailed: StateFlow<Boolean> = statisticalDetector.calibrationFailed
+
     // Latest values from each detector (updated by coroutines below)
     @Volatile private var latestStatistical = PresenceState.UNKNOWN
     @Volatile private var latestMl = PresenceState.UNKNOWN

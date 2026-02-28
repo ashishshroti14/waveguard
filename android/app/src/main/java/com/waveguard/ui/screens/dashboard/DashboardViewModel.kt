@@ -48,6 +48,10 @@ class DashboardViewModel @Inject constructor(
 
     val calibrationProgress: StateFlow<Float> = presenceDetector.calibrationProgress
 
+    val calibrationSampleCount: StateFlow<Int> = presenceDetector.calibrationSampleCount
+
+    val calibrationFailed: StateFlow<Boolean> = presenceDetector.calibrationFailed
+
     private val _rssiHistory = MutableStateFlow<List<Float>>(emptyList())
     val rssiHistory: StateFlow<List<Float>> = _rssiHistory.asStateFlow()
 

@@ -79,6 +79,8 @@ fun DashboardScreen(
     val isMonitoring by viewModel.isMonitoring.collectAsStateWithLifecycle()
     val rssiHistory by viewModel.rssiHistory.collectAsStateWithLifecycle()
     val calibrationProgress by viewModel.calibrationProgress.collectAsStateWithLifecycle()
+    val calibrationSampleCount by viewModel.calibrationSampleCount.collectAsStateWithLifecycle()
+    val calibrationFailed by viewModel.calibrationFailed.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = NavyBackground,
@@ -173,13 +175,14 @@ fun DashboardScreen(
                     Text(
                         text = when {
                             presenceState == PresenceState.UNKNOWN && !isMonitoring -> "Ready"
+                            calibrationFailed -> "Calibration Failed"
                             isCalibrating ->
                                 "Calibrating… ${(calibrationProgress * 100).toInt()}%"
                             else -> presenceState.toDisplayName()
                         },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = presenceState.toColor()
+                        color = if (calibrationFailed) RedAlert else presenceState.toColor()
                     )
                     if (!isMonitoring && presenceState == PresenceState.UNKNOWN) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -188,10 +191,20 @@ fun DashboardScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
+                    } else if (calibrationFailed) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "No Wi-Fi data received. Connect to a Wi-Fi network and restart.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = RedAlert
+                        )
                     } else if (isCalibrating) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Keep the room empty during calibration",
+                            text = if (calibrationSampleCount > 0)
+                                "Collecting data… $calibrationSampleCount samples · Keep room empty"
+                            else
+                                "Waiting for Wi-Fi data…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
