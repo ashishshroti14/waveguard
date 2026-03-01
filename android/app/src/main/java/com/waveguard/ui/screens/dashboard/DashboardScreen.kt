@@ -81,6 +81,7 @@ fun DashboardScreen(
     val calibrationProgress by viewModel.calibrationProgress.collectAsStateWithLifecycle()
     val calibrationSampleCount by viewModel.calibrationSampleCount.collectAsStateWithLifecycle()
     val calibrationFailed by viewModel.calibrationFailed.collectAsStateWithLifecycle()
+    val noWifiAtStart by viewModel.noWifiAtStart.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = NavyBackground,
@@ -174,6 +175,7 @@ fun DashboardScreen(
                 ) {
                     Text(
                         text = when {
+                            noWifiAtStart -> "No Wi-Fi Connection"
                             presenceState == PresenceState.UNKNOWN && !isMonitoring -> "Ready"
                             calibrationFailed -> "Calibration Failed"
                             isCalibrating ->
@@ -182,9 +184,20 @@ fun DashboardScreen(
                         },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (calibrationFailed) RedAlert else presenceState.toColor()
+                        color = when {
+                            noWifiAtStart -> RedAlert
+                            calibrationFailed -> RedAlert
+                            else -> presenceState.toColor()
+                        }
                     )
-                    if (!isMonitoring && presenceState == PresenceState.UNKNOWN) {
+                    if (noWifiAtStart) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Connect to a Wi-Fi network first. Creating a hotspot is not enough — the phone must be connected TO a Wi-Fi network as a client.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = RedAlert
+                        )
+                    } else if (!isMonitoring && presenceState == PresenceState.UNKNOWN) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Tap Start Monitoring to begin",

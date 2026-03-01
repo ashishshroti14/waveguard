@@ -1,6 +1,8 @@
 package com.waveguard.ui.screens.dashboard
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -52,6 +54,10 @@ class DashboardViewModel @Inject constructor(
 
     val calibrationFailed: StateFlow<Boolean> = presenceDetector.calibrationFailed
 
+    /** True when the user tapped Start but no Wi-Fi connection was detected. */
+    private val _noWifiAtStart = MutableStateFlow(false)
+    val noWifiAtStart: StateFlow<Boolean> = _noWifiAtStart.asStateFlow()
+
     private val _rssiHistory = MutableStateFlow<List<Float>>(emptyList())
     val rssiHistory: StateFlow<List<Float>> = _rssiHistory.asStateFlow()
 
@@ -72,6 +78,16 @@ class DashboardViewModel @Inject constructor(
 
     fun startMonitoring() {
         if (_isMonitoring.value) return
+        _noWifiAtStart.value = false
+
+        // Pre-check: is the device connected to Wi-Fi?
+        // When the phone IS a hotspot (AP mode), it is NOT a Wi-Fi client, so no RSSI data
+        // will ever arrive and calibration will fail.  Give immediate feedback instead.
+        if (!isWifiConnected()) {
+            _noWifiAtStart.value = true
+            return
+        }
+
         _isMonitoring.value = true
 
         // Start the foreground service, which also wires up presenceDetector.start().
@@ -125,7 +141,20 @@ class DashboardViewModel @Inject constructor(
         monitoringJob?.cancel()
         monitoringJob = null
         _isMonitoring.value = false
+        _noWifiAtStart.value = false
         context.startService(WaveGuardService.stopIntent(context))
+    }
+
+    /**
+     * Returns true when the device has an active Wi-Fi client connection (TRANSPORT_WIFI).
+     * When the phone is in hotspot / AP mode it is NOT a Wi-Fi client.
+     */
+    private fun isWifiConnected(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 
     override fun onCleared() {
