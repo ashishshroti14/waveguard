@@ -219,7 +219,7 @@ fun DashboardScreen(
                     if (noWifiAtStart) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Connect to a Wi-Fi network first. Creating a hotspot is not enough — the phone must be connected TO a Wi-Fi network as a client.",
+                            text = "Connect to a Wi-Fi network first. Creating a hotspot is not enough — the phone must be connected to a Wi-Fi network as a client.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = RedAlert
                         )

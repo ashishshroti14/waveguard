@@ -33,7 +33,8 @@ class HistoryViewModel @Inject constructor(
                     _alerts.value = alertList
                     _isLoading.value = false
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.e("HistoryViewModel", "Failed to load alerts", e)
                 _isLoading.value = false
             }
         }
