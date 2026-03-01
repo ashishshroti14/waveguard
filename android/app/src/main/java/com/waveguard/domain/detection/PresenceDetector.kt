@@ -105,6 +105,14 @@ class PresenceDetector @Inject constructor(
     // -----------------------------------------------------------------------
 
     /**
+     * Forwards the user's sensitivity preference to the underlying [StatisticalDetector].
+     * Call this before [start] so the thresholds are set for the upcoming session.
+     */
+    fun applySensitivity(level: Float) {
+        statisticalDetector.setSensitivity(level)
+    }
+
+    /**
      * Starts the detection engine.  Safe to call multiple times — subsequent calls are no-ops.
      * Data flows are supplied by the [SensorRepository] via the caller.
      */

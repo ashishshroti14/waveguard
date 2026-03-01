@@ -92,6 +92,11 @@ class DashboardViewModel @Inject constructor(
 
         _isMonitoring.value = true
 
+        // Apply sensitivity from user settings to the detection engine
+        val prefs = context.getSharedPreferences("waveguard_settings", Context.MODE_PRIVATE)
+        val sensitivity = prefs.getFloat("sensitivity_level", 0.5f)
+        presenceDetector.applySensitivity(sensitivity)
+
         // Start the foreground service, which also wires up presenceDetector.start().
         // PresenceDetector.start() is idempotent so the ViewModel calling it here is also safe.
         val serviceIntent = WaveGuardService.startIntent(context)

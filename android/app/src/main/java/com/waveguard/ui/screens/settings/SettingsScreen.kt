@@ -228,10 +228,10 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AboutRow(label = "App", value = "WaveGuard")
-                    AboutRow(label = "Version", value = "1.0.0-alpha")
+                    AboutRow(label = "Version", value = "2.0.0-alpha")
                     AboutRow(label = "Detection Engine", value = "Wi-Fi RSSI / CSI")
                     AboutRow(label = "ML Model", value = "WiFlexFormer (Phase 2)")
-                    AboutRow(label = "Build", value = "Phase 1 — RSSI Baseline")
+                    AboutRow(label = "Build", value = "v2 — Spectral + CUSUM")
                 }
             }
 
