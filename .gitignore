@@ -1,0 +1,24 @@
+## Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+## Android build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+*.ap_
+
+## Android Studio / IntelliJ
+*.iml
+.idea/
+.DS_Store
+
+## Gradle wrapper JAR (binary — generated locally via `gradle wrapper` in android/)
+android/gradle/wrapper/gradle-wrapper.jar

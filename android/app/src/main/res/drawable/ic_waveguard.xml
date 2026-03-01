@@ -1,0 +1,57 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background circle -->
+    <path
+        android:fillColor="#0A1628"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+
+    <!-- Outer radar arc -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M22,54 A32,32 0 0,1 54,22 A32,32 0 0,1 86,54" />
+
+    <!-- Middle radar arc -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M31,54 A23,23 0 0,1 54,31 A23,23 0 0,1 77,54" />
+
+    <!-- Inner radar arc -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M40,54 A14,14 0 0,1 54,40 A14,14 0 0,1 68,54" />
+
+    <!-- Center dot -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,54 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+
+    <!-- Vertical stem -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M54,58 L54,80" />
+
+    <!-- Base line -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M40,80 L68,80" />
+
+</vector>
