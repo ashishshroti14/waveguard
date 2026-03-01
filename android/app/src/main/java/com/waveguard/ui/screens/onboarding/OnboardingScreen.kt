@@ -196,7 +196,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
     ) {
         Icon(
             imageVector = page.icon,
-            contentDescription = null,
+            contentDescription = page.title,
             tint = page.iconTint,
             modifier = Modifier.size(80.dp)
         )
@@ -233,7 +233,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
                         ) {
                             Icon(
                                 imageVector = icon,
-                                contentDescription = null,
+                                contentDescription = label,
                                 tint = CyanActive,
                                 modifier = Modifier.size(20.dp)
                             )

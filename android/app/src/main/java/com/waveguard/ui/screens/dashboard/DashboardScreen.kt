@@ -235,7 +235,7 @@ fun DashboardScreen(
                                 color = TextPrimary
                             )
                             Text(
-                                text = if (signalStrength < 0f) "${signalStrength.toInt()} dBm" else "-- dBm",
+                                text = if (signalStrength < 0f) "${signalStrength.toInt()} dBm" else "No signal",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = CyanActive
                             )
@@ -275,7 +275,7 @@ fun DashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No recent alerts",
+                                text = if (isMonitoring) "No recent alerts" else "Start monitoring to see alerts",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSecondary
                             )
@@ -357,7 +357,7 @@ private fun RoomStatusRow(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = if (signalStrength < 0f) "${signalStrength.toInt()} dBm" else "-- dBm",
+                    text = if (signalStrength < 0f) "${signalStrength.toInt()} dBm" else "No signal",
                     style = MaterialTheme.typography.bodySmall,
                     color = CyanActive,
                     fontWeight = FontWeight.Medium

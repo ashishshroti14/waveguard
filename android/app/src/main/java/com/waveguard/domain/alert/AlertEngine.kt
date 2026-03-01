@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,6 +40,7 @@ class AlertEngine @Inject constructor(
 ) {
 
     companion object {
+        private const val TAG = "AlertEngine"
         private const val THROTTLE_MS = 30_000L // 30 s between same-type alerts
     }
 
@@ -74,7 +76,7 @@ class AlertEngine @Inject constructor(
                 .onEach { (presence, activity) ->
                     evaluate(presence, activity, confidence = 1f)
                 }
-                .catch { /* log silently */ }
+                .catch { e -> Log.e(TAG, "Alert evaluation stream failed", e) }
                 .collect()
         }
     }

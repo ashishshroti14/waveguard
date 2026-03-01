@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,6 +51,7 @@ class PresenceDetector @Inject constructor(
 ) {
 
     companion object {
+        private const val TAG = "PresenceDetector"
         // Combination weights for Phase 2
         private const val WEIGHT_ML = 0.60f
         private const val WEIGHT_STATISTICAL = 0.25f
@@ -126,7 +128,7 @@ class PresenceDetector @Inject constructor(
                         combine()
                     }
                 }
-                .catch { /* log silently */ }
+                .catch { e -> Log.e(TAG, "Statistical detector failed", e) }
                 .collect()
         }
 
@@ -137,7 +139,7 @@ class PresenceDetector @Inject constructor(
                     latestMl = state
                     combine()
                 }
-                .catch { }
+                .catch { e -> Log.e(TAG, "CSI presence detector failed", e) }
                 .collect()
         }
 
@@ -147,14 +149,14 @@ class PresenceDetector @Inject constructor(
                     latestActivity = activity
                     _activityType.emit(activity)
                 }
-                .catch { }
+                .catch { e -> Log.e(TAG, "CSI activity type stream failed", e) }
                 .collect()
         }
 
         // Phase 2: CSI processing pipeline
         scope.launch {
             csiPresenceDetector.process(csiFlow)
-                .catch { }
+                .catch { e -> Log.e(TAG, "CSI processing pipeline failed", e) }
                 .collect()
         }
 
@@ -169,7 +171,7 @@ class PresenceDetector @Inject constructor(
                         _confidence.value = latestFallConf
                     }
                 }
-                .catch { }
+                .catch { e -> Log.e(TAG, "Fall detector failed", e) }
                 .collect()
         }
 
@@ -177,7 +179,7 @@ class PresenceDetector @Inject constructor(
         scope.launch {
             anomalyDetector.monitor(presenceState)
                 .onEach { isAnomaly -> latestAnomaly = isAnomaly }
-                .catch { }
+                .catch { e -> Log.e(TAG, "Anomaly detector failed", e) }
                 .collect()
         }
 

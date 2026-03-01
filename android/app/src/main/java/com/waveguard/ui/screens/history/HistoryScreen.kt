@@ -226,7 +226,7 @@ private fun EmptyHistoryContent(modifier: Modifier = Modifier) {
     ) {
         Icon(
             imageVector = Icons.Default.NotificationsNone,
-            contentDescription = null,
+            contentDescription = "No alerts",
             tint = TextSecondary,
             modifier = Modifier.size(72.dp)
         )

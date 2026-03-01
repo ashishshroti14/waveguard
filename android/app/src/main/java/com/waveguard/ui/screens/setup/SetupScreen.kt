@@ -87,7 +87,7 @@ fun SetupScreen(
             // Header
             Icon(
                 imageVector = Icons.Default.Sensors,
-                contentDescription = null,
+                contentDescription = "WaveGuard sensor icon",
                 tint = CyanActive,
                 modifier = Modifier.size(72.dp)
             )
@@ -107,7 +107,7 @@ fun SetupScreen(
 
             // Mode cards
             ModeCard(
-                icon = { Icon(Icons.Default.Bluetooth, contentDescription = null, tint = CyanActive, modifier = Modifier.size(32.dp)) },
+                icon = { Icon(Icons.Default.Bluetooth, contentDescription = "Bluetooth", tint = CyanActive, modifier = Modifier.size(32.dp)) },
                 title = "ESP32 Sensor Mode",
                 subtitle = "Best accuracy — requires WaveGuard ESP32 hardware",
                 badge = "RECOMMENDED",
@@ -116,7 +116,7 @@ fun SetupScreen(
             )
 
             ModeCard(
-                icon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(32.dp)) },
+                icon = { Icon(Icons.Default.PhoneAndroid, contentDescription = "Phone", tint = AmberWarning, modifier = Modifier.size(32.dp)) },
                 title = "Phone-Only Mode",
                 subtitle = "Uses Wi-Fi RSSI only — no hardware required",
                 badge = "PHASE 1",
@@ -255,6 +255,12 @@ private fun NotFoundContent(onRetry: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("ESP32 not found nearby", style = MaterialTheme.typography.bodyMedium, color = AmberWarning)
+        Text(
+            text = "Make sure Bluetooth is enabled, the ESP32 is powered on, and your phone is within range.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            textAlign = TextAlign.Center
+        )
         OutlinedButton(
             onClick = onRetry,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = CyanActive)
@@ -285,7 +291,7 @@ private fun ConnectedContent(onContinue: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GreenSafe, modifier = Modifier.size(24.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = "Connected", tint = GreenSafe, modifier = Modifier.size(24.dp))
             Text("ESP32 Connected!", style = MaterialTheme.typography.bodyLarge, color = GreenSafe, fontWeight = FontWeight.SemiBold)
         }
         Button(
@@ -304,6 +310,12 @@ private fun FailedConnectionContent(onRetry: () -> Unit, onSkip: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("Connection failed", style = MaterialTheme.typography.bodyMedium, color = RedAlert)
+        Text(
+            text = "The ESP32 was found but could not connect. Try moving closer, restarting the ESP32, or checking that no other device is connected to it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            textAlign = TextAlign.Center
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = onRetry,

@@ -138,7 +138,7 @@ private fun IdleContent(onStart: () -> Unit, onSkip: () -> Unit) {
     ) {
         Icon(
             imageVector = Icons.Default.Sensors,
-            contentDescription = null,
+            contentDescription = "Calibration",
             tint = CyanActive,
             modifier = Modifier.size(80.dp)
         )
@@ -274,7 +274,7 @@ private fun CompleteContent(baselineCount: Int, onContinue: () -> Unit) {
     ) {
         Icon(
             imageVector = Icons.Default.CheckCircle,
-            contentDescription = null,
+            contentDescription = "Calibration complete",
             tint = GreenSafe,
             modifier = Modifier.size(80.dp)
         )
@@ -331,7 +331,7 @@ private fun FailedContent(reason: String, onRetry: () -> Unit, onSkip: () -> Uni
     ) {
         Icon(
             imageVector = Icons.Default.ErrorOutline,
-            contentDescription = null,
+            contentDescription = "Calibration failed",
             tint = RedAlert,
             modifier = Modifier.size(80.dp)
         )
