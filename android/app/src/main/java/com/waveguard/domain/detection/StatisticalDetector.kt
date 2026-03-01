@@ -120,12 +120,16 @@ class StatisticalDetector @Inject constructor() {
         // Hysteresis
         private const val VOTE_THRESHOLD_ENTER = 0.30f
         private const val VOTE_THRESHOLD_STAY = 0.18f
+        private const val MOVEMENT_THRESHOLD_MULTIPLIER = 1.8f
 
         // Fall detection
         private const val FALL_DROP_THRESHOLD = 12f
         private const val FALL_DROP_WINDOW_MS = 2_000L
         private const val FALL_FLATLINE_VARIANCE = 0.5f
         private const val FALL_FLATLINE_WINDOW = 10
+
+        // CUSUM algorithm parameters
+        private const val CUSUM_DRIFT_ALLOWANCE = 0.5f   // slack per sample before accumulating
 
         // FFT frequency bands (Hz)
         private const val MOTION_BAND_LOW = 0.5f
@@ -255,8 +259,10 @@ class StatisticalDetector @Inject constructor() {
         var apCount = 0
         var fallVotes = 0
 
-        // Sensitivity scaling: maps 0..1 → threshold multiplier
-        // sensitivity=0 → threshMul=1.5 (harder to trigger), sensitivity=1 → threshMul=0.5
+        // Sensitivity scaling: linearly maps the 0..1 slider to a threshold multiplier.
+        //   sensitivity=0.0 (Low)  → threshMul=1.5 → thresholds are 50% harder to exceed
+        //   sensitivity=0.5 (Med)  → threshMul=1.0 → thresholds are at their base values
+        //   sensitivity=1.0 (Max)  → threshMul=0.5 → thresholds are halved (more sensitive)
         val threshMul = 1.5f - sensitivity
 
         for (entry in samples) {
@@ -327,8 +333,9 @@ class StatisticalDetector @Inject constructor() {
             }
 
             // --- Feature 7: CUSUM change-points ---
-            val cusumThresh = (CUSUM_THRESHOLD_SIGMA * threshMul).toInt().coerceAtLeast(1)
-            if (cusumChanges >= cusumThresh) {
+            // Compare as floats to preserve the sensitivity gradient; integer truncation
+            // would collapse distinct sensitivity levels to the same count threshold.
+            if (cusumChanges.toFloat() >= CUSUM_THRESHOLD_SIGMA * threshMul) {
                 apScore += W_CUSUM
             }
 
@@ -350,7 +357,7 @@ class StatisticalDetector @Inject constructor() {
 
         val result = when {
             fallVotes > 0 -> PresenceState.FALL_DETECTED
-            normScore >= threshold * 1.8f -> PresenceState.MOVEMENT_DETECTED
+            normScore >= threshold * MOVEMENT_THRESHOLD_MULTIPLIER -> PresenceState.MOVEMENT_DETECTED
             normScore >= threshold -> PresenceState.PRESENCE_DETECTED
             _isCalibrated.value -> PresenceState.EMPTY
             else -> PresenceState.UNKNOWN
@@ -475,8 +482,8 @@ class StatisticalDetector @Inject constructor() {
         var cusumNeg = 0f
         var changes = 0
         for (v in values) {
-            cusumPos = maxOf(0f, cusumPos + v - baselineMean - 0.5f)
-            cusumNeg = maxOf(0f, cusumNeg - v + baselineMean - 0.5f)
+            cusumPos = maxOf(0f, cusumPos + v - baselineMean - CUSUM_DRIFT_ALLOWANCE)
+            cusumNeg = maxOf(0f, cusumNeg - v + baselineMean - CUSUM_DRIFT_ALLOWANCE)
             if (cusumPos > threshold || cusumNeg > threshold) {
                 changes++
                 cusumPos = 0f
