@@ -71,8 +71,10 @@ class RssiScanner @Inject constructor(
         // Emit connected-network RSSI immediately so the UI reflects signal before first scan
         connectedNetworkRssi()?.let { trySend(listOf(it)) }
 
-        // Coroutine that periodically triggers new scans at ~2 Hz (500 ms).
+        // Coroutine that periodically triggers new scans at ~1 Hz (1000 ms).
         // Android throttles background scans; the receiver will still fire with cached results.
+        // Also emits connected-network RSSI every cycle so the signal graph updates even
+        // when scan results are throttled or empty.
         val scanJob = launch {
             while (isActive) {
                 @Suppress("MissingPermission")
@@ -80,9 +82,14 @@ class RssiScanner @Inject constructor(
                 if (!started) {
                     Log.d(TAG, "startScan() returned false – using last known results")
                     val cached = parseResults()
-                    if (cached.isNotEmpty()) trySend(cached)
+                    if (cached.isNotEmpty()) {
+                        trySend(cached)
+                    } else {
+                        // No scan results at all — try just the connected-network RSSI
+                        connectedNetworkRssi()?.let { trySend(listOf(it)) }
+                    }
                 }
-                delay(500L)
+                delay(1_000L)
             }
         }
 
@@ -178,28 +185,50 @@ class RssiScanner @Inject constructor(
     /**
      * Reads the current Wi-Fi RSSI via [NetworkCapabilities.getSignalStrength] (API 29+).
      * This works without location permission, avoiding the privacy-redaction on Android 12+.
+     * Uses `activeNetwork` first (reliable), then falls back to iterating `allNetworks`.
      */
     @Suppress("NewApi") // guarded by SDK_INT check in the only caller
     private fun networkCapabilitiesRssi(): RssiData? {
         return try {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 ?: return null
-            // Check all networks, not just activeNetwork, because the system may prefer
-            // cellular as the default even when a Wi-Fi connection exists.
-            val networks = cm.allNetworks
-            for (network in networks) {
-                val caps = cm.getNetworkCapabilities(network) ?: continue
-                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-                val rssi = caps.signalStrength
-                if (rssi == Int.MIN_VALUE || rssi < MIN_VALID_RSSI || rssi > MAX_VALID_RSSI) continue
-                return RssiData(
-                    timestamp = System.currentTimeMillis(),
-                    bssid = "active_ap",
-                    ssid = "Connected",
-                    rssi = rssi,
-                    frequency = 0
-                )
+
+            // Primary: check activeNetwork
+            val activeNet = cm.activeNetwork
+            if (activeNet != null) {
+                val caps = cm.getNetworkCapabilities(activeNet)
+                if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    val rssi = caps.signalStrength
+                    if (rssi != Int.MIN_VALUE && rssi in MIN_VALID_RSSI..MAX_VALID_RSSI) {
+                        return RssiData(
+                            timestamp = System.currentTimeMillis(),
+                            bssid = "active_ap",
+                            ssid = "Connected",
+                            rssi = rssi,
+                            frequency = 0
+                        )
+                    }
+                }
             }
+
+            // Fallback: iterate allNetworks
+            try {
+                val networks = cm.allNetworks
+                for (network in networks) {
+                    val caps = cm.getNetworkCapabilities(network) ?: continue
+                    if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+                    val rssi = caps.signalStrength
+                    if (rssi == Int.MIN_VALUE || rssi < MIN_VALID_RSSI || rssi > MAX_VALID_RSSI) continue
+                    return RssiData(
+                        timestamp = System.currentTimeMillis(),
+                        bssid = "active_ap",
+                        ssid = "Connected",
+                        rssi = rssi,
+                        frequency = 0
+                    )
+                }
+            } catch (_: Exception) { /* SecurityException on some devices */ }
+
             null
         } catch (e: Exception) {
             null

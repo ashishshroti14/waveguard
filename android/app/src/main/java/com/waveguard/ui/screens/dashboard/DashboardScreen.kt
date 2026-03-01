@@ -201,7 +201,7 @@ fun DashboardScreen(
                 ) {
                     Text(
                         text = when {
-                            noWifiAtStart -> "No Wi-Fi Connection"
+                            noWifiAtStart && !isMonitoring -> "No Wi-Fi Detected"
                             presenceState == PresenceState.UNKNOWN && !isMonitoring -> "Ready"
                             calibrationFailed -> "Calibration Failed"
                             isCalibrating ->
@@ -211,17 +211,24 @@ fun DashboardScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = when {
-                            noWifiAtStart -> RedAlert
+                            noWifiAtStart && !isMonitoring -> AmberWarning
                             calibrationFailed -> RedAlert
                             else -> presenceState.toColor()
                         }
                     )
-                    if (noWifiAtStart) {
+                    if (noWifiAtStart && !isMonitoring) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Connect to a Wi-Fi network first. Creating a hotspot is not enough — the phone must be connected to a Wi-Fi network as a client.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = RedAlert
+                        )
+                    } else if (noWifiAtStart && isMonitoring) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Wi-Fi not detected — monitoring started anyway. If calibration fails, check your Wi-Fi connection.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AmberWarning
                         )
                     } else if (!isMonitoring && presenceState == PresenceState.UNKNOWN) {
                         Spacer(modifier = Modifier.height(4.dp))

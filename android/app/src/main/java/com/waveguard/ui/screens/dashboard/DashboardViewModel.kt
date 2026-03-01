@@ -3,6 +3,7 @@ package com.waveguard.ui.screens.dashboard
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -80,12 +81,13 @@ class DashboardViewModel @Inject constructor(
         if (_isMonitoring.value) return
         _noWifiAtStart.value = false
 
-        // Pre-check: is the device connected to Wi-Fi?
-        // When the phone IS a hotspot (AP mode), it is NOT a Wi-Fi client, so no RSSI data
-        // will ever arrive and calibration will fail.  Give immediate feedback instead.
+        // Soft pre-check: warn the user if we can't detect Wi-Fi, but don't block them.
+        // The `isWifiConnected()` API is unreliable on some devices / Android versions,
+        // so we never prevent the user from starting.  If they truly have no Wi-Fi the
+        // calibration will fail after 60 s and show "Calibration Failed" instead.
         if (!isWifiConnected()) {
             _noWifiAtStart.value = true
-            return
+            // Proceed anyway — don't return.
         }
 
         _isMonitoring.value = true
@@ -111,6 +113,8 @@ class DashboardViewModel @Inject constructor(
             launch {
                 sensorRepository.rssiData.collect { rssiList ->
                     if (rssiList.isNotEmpty()) {
+                        // Clear the WiFi warning as soon as we get real data
+                        if (_noWifiAtStart.value) _noWifiAtStart.value = false
                         val avgRssi = rssiList.map { it.rssi }.average().toFloat()
                         _signalStrength.value = avgRssi
                         val history = _rssiHistory.value.toMutableList()
@@ -161,16 +165,40 @@ class DashboardViewModel @Inject constructor(
 
     /**
      * Returns true when the device has an active Wi-Fi client connection (TRANSPORT_WIFI).
-     * Checks all networks because the system may prefer cellular as default even when
-     * a Wi-Fi connection exists.
+     * Uses `activeNetwork` as the primary source (works on all API levels), then falls back
+     * to iterating `allNetworks` (deprecated on API 31+ but still useful as a fallback),
+     * then finally checks `WifiManager.connectionInfo` as a last resort.
      */
+    @Suppress("DEPRECATION")
     private fun isWifiConnected(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
-        return cm.allNetworks.any { network ->
-            cm.getNetworkCapabilities(network)
-                ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+
+        // Primary: check activeNetwork (always available on API 23+)
+        val activeNet = cm.activeNetwork
+        if (activeNet != null) {
+            val caps = cm.getNetworkCapabilities(activeNet)
+            if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) return true
         }
+
+        // Fallback: iterate allNetworks (deprecated on API 31+ but still works on many devices)
+        try {
+            if (cm.allNetworks.any { network ->
+                    cm.getNetworkCapabilities(network)
+                        ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                }) return true
+        } catch (_: Exception) { /* SecurityException on some devices */ }
+
+        // Last resort: WifiManager (works when location permission is granted)
+        try {
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            if (wm != null && wm.isWifiEnabled) {
+                val info = wm.connectionInfo
+                if (info != null && info.networkId >= 0) return true
+            }
+        } catch (_: Exception) { }
+
+        return false
     }
 
     override fun onCleared() {
