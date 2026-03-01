@@ -107,12 +107,16 @@ class RssiScanner @Inject constructor(
             Log.w(TAG, "Failed to register NetworkCallback", e)
         }
 
-        // Emit connected-network RSSI immediately so the UI reflects signal before first scan
-        connectedNetworkRssi()?.let { trySend(listOf(it)) }
-
-        // Periodic poll: triggers scans + emits connected-network RSSI as a fallback.
+        // Periodic poll: triggers scans + emits connected-network RSSI.
+        // Polling at 500 ms (~2 Hz) matches the sampling rate used in WiFi sensing
+        // research papers (e.g. Wision, WiFall) for capturing human-motion-induced
+        // RSSI fluctuations.  Android scan throttling limits actual scan results to
+        // ~4/2 min, but connectionInfo.rssi updates on every poll.
         val scanJob = launch {
             while (isActive) {
+                // Always emit the connected AP's live RSSI first (fine-grained, ~1 dB)
+                connectedNetworkRssi()?.let { trySend(listOf(it)) }
+
                 @Suppress("MissingPermission")
                 val started = wifiManager.startScan()
                 if (!started) {
@@ -120,11 +124,9 @@ class RssiScanner @Inject constructor(
                     val cached = parseResults()
                     if (cached.isNotEmpty()) {
                         trySend(cached)
-                    } else {
-                        connectedNetworkRssi()?.let { trySend(listOf(it)) }
                     }
                 }
-                delay(1_000L)
+                delay(500L)
             }
         }
 
@@ -190,36 +192,54 @@ class RssiScanner @Inject constructor(
      * Returns a [RssiData] entry for the currently associated Wi-Fi network, or null if the
      * device is not connected or the RSSI value is invalid.
      *
-     * On Android 10+ (API 29) the primary source is [NetworkCapabilities.getSignalStrength],
-     * which does **not** require location permission and is immune to the BSSID/SSID
-     * privacy-redaction introduced in Android 12.  The deprecated [WifiManager.connectionInfo]
-     * API is kept as a fallback for older devices.
+     * **Primary source**: [WifiManager.connectionInfo] — gives fine-grained (~1 dB) RSSI
+     * readings that update on every poll.  This is critical for presence detection, which
+     * relies on sub-dB signal fluctuations caused by human movement.
+     *
+     * **Fallback**: [NetworkCapabilities.getSignalStrength] — does not require location
+     * permission but is coarsely quantized (only updates on ≥5 dB shifts), which produces
+     * the "flat line" problem.  Used only when connectionInfo is unavailable or returns
+     * a redacted/invalid result (common on Android 12+ without location permission).
      */
     @Suppress("DEPRECATION")
     private fun connectedNetworkRssi(): RssiData? {
-        // Android 10+: prefer NetworkCapabilities – no location permission needed.
+        // Primary: WifiManager.connectionInfo gives fine-grained RSSI on every poll
+        try {
+            val info = wifiManager.connectionInfo
+            if (info != null) {
+                val rssi = info.rssi
+                if (rssi != Integer.MIN_VALUE && rssi in -100..0) {
+                    val rawSsid = info.ssid ?: ""
+                    val ssid = rawSsid.trim('"')
+                    val bssid = info.bssid?.takeIf { it != "02:00:00:00:00:00" }
+                    // Use real BSSID if available (needs location on API 29+)
+                    if (bssid != null && ssid.isNotBlank() && ssid != "<unknown ssid>") {
+                        return RssiData(
+                            timestamp = System.currentTimeMillis(),
+                            bssid = bssid,
+                            ssid = ssid,
+                            rssi = rssi,
+                            frequency = info.frequency
+                        )
+                    }
+                    // BSSID/SSID redacted (Android 12+ without location) but RSSI is valid —
+                    // still emit it with a synthetic identifier so the detector gets data.
+                    return RssiData(
+                        timestamp = System.currentTimeMillis(),
+                        bssid = "connected_ap",
+                        ssid = "Connected",
+                        rssi = rssi,
+                        frequency = if (info.frequency > 0) info.frequency else 0
+                    )
+                }
+            }
+        } catch (_: SecurityException) { /* location not granted — fall through */ }
+
+        // Fallback: NetworkCapabilities (coarse but works without location permission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             networkCapabilitiesRssi()?.let { return it }
         }
-        return try {
-            val info = wifiManager.connectionInfo ?: return null
-            val rssi = info.rssi
-            // RSSI value of Integer.MIN_VALUE means "no signal / not connected"
-            if (rssi == Integer.MIN_VALUE || rssi < -100 || rssi > 0) return null
-            val rawSsid = info.ssid ?: return null
-            val ssid = rawSsid.trim('"')
-            if (ssid.isBlank() || ssid == "<unknown ssid>") return null
-            val bssid = info.bssid?.takeIf { it != "02:00:00:00:00:00" } ?: return null
-            RssiData(
-                timestamp = System.currentTimeMillis(),
-                bssid = bssid,
-                ssid = ssid,
-                rssi = rssi,
-                frequency = info.frequency
-            )
-        } catch (e: SecurityException) {
-            null
-        }
+        return null
     }
 
     /**
