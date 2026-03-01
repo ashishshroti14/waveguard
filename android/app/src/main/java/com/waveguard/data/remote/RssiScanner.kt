@@ -44,8 +44,13 @@ class RssiScanner @Inject constructor(
         context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
     /**
-     * Emits fresh [List<RssiData>] each time a Wi-Fi scan completes.
-     * The flow terminates when the collector is cancelled.
+     * Emits fresh [List<RssiData>] each time a Wi-Fi scan completes or the system reports
+     * a change in Wi-Fi capabilities (including signal strength).
+     *
+     * Three data sources are combined for maximum reliability:
+     * 1. **BroadcastReceiver** — standard scan results (throttled on Android 9+)
+     * 2. **NetworkCallback** — real-time WiFi capability changes (API 21+, no location needed)
+     * 3. **Periodic poll** — fallback that reads connected-network RSSI every second
      */
     val rssiFlow: Flow<List<RssiData>> = callbackFlow<List<RssiData>> {
         val scanReceiver = object : BroadcastReceiver() {
@@ -68,13 +73,44 @@ class RssiScanner @Inject constructor(
             context.registerReceiver(scanReceiver, filter)
         }
 
+        // NetworkCallback: real-time WiFi signal updates without location permission.
+        // This is the most reliable RSSI source on Android 12+.
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(
+                network: android.net.Network,
+                caps: NetworkCapabilities
+            ) {
+                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return
+                val rssi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    caps.signalStrength
+                } else {
+                    return // signalStrength not available pre-Q
+                }
+                if (rssi == Int.MIN_VALUE || rssi < MIN_VALID_RSSI || rssi > MAX_VALID_RSSI) return
+                val data = RssiData(
+                    timestamp = System.currentTimeMillis(),
+                    bssid = "active_ap",
+                    ssid = "Connected",
+                    rssi = rssi,
+                    frequency = 0
+                )
+                trySend(listOf(data))
+            }
+        }
+        val wifiRequest = android.net.NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        try {
+            cm?.registerNetworkCallback(wifiRequest, networkCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register NetworkCallback", e)
+        }
+
         // Emit connected-network RSSI immediately so the UI reflects signal before first scan
         connectedNetworkRssi()?.let { trySend(listOf(it)) }
 
-        // Coroutine that periodically triggers new scans at ~1 Hz (1000 ms).
-        // Android throttles background scans; the receiver will still fire with cached results.
-        // Also emits connected-network RSSI every cycle so the signal graph updates even
-        // when scan results are throttled or empty.
+        // Periodic poll: triggers scans + emits connected-network RSSI as a fallback.
         val scanJob = launch {
             while (isActive) {
                 @Suppress("MissingPermission")
@@ -85,7 +121,6 @@ class RssiScanner @Inject constructor(
                     if (cached.isNotEmpty()) {
                         trySend(cached)
                     } else {
-                        // No scan results at all — try just the connected-network RSSI
                         connectedNetworkRssi()?.let { trySend(listOf(it)) }
                     }
                 }
@@ -95,6 +130,11 @@ class RssiScanner @Inject constructor(
 
         awaitClose {
             scanJob.cancel()
+            try {
+                cm?.unregisterNetworkCallback(networkCallback)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to unregister NetworkCallback", e)
+            }
             try {
                 context.unregisterReceiver(scanReceiver)
             } catch (e: IllegalArgumentException) {

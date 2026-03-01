@@ -18,17 +18,25 @@ import kotlinx.coroutines.flow.runningFold
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
-import kotlin.math.sqrt
+import kotlin.math.ln
 
 /**
- * Detects human presence and falls using RSSI statistics.
+ * WiFi RSSI-based presence and fall detection using multi-feature statistical analysis.
  *
- * Calibration phase (60 s): records empty-room baseline mean and variance per AP.
- * Detection phase: uses rolling 5-second windows (~10 samples at 2 Hz) to compute
- * variance ratio and mean shift against the baseline.
+ * **Calibration** (60 s): records empty-room baseline per AP — mean, variance, jitter
+ * (mean absolute consecutive difference), and signal entropy.
  *
- * Fall heuristic: a sharp RSSI drop (>15 dB in <2 s) followed by a flatline
- * (variance < 0.5 for 5 s) is classified as FALL_DETECTED.
+ * **Detection** uses a rolling window and five complementary features:
+ *   1. **Variance ratio** — elevated variance vs. baseline signals body-induced multipath
+ *   2. **Mean shift** — sustained RSSI offset signals a large reflector (person) nearby
+ *   3. **Jitter (rate-of-change)** — consecutive-sample differences detect motion even
+ *      when variance and mean stay close to baseline (e.g. slow walking)
+ *   4. **Signal entropy** — Shannon entropy of quantised RSSI bins; movement broadens
+ *      the distribution → higher entropy
+ *   5. **Fall heuristic** — sharp drop (>12 dB / 2 s) + flatline (var <0.5 / 5 s)
+ *
+ * A **weighted vote with hysteresis** prevents state flickering — the detector needs
+ * more evidence to transition *into* PRESENCE than to *stay* there.
  */
 @Singleton
 class StatisticalDetector @Inject constructor() {
@@ -43,21 +51,19 @@ class StatisticalDetector @Inject constructor() {
     private val _calibrationProgress = MutableStateFlow(0f)
     val calibrationProgress: StateFlow<Float> = _calibrationProgress.asStateFlow()
 
-    /** Number of RSSI samples collected so far during calibration. */
     private val _calibrationSampleCount = MutableStateFlow(0)
     val calibrationSampleCount: StateFlow<Int> = _calibrationSampleCount.asStateFlow()
 
-    /** True when calibration completed but no Wi-Fi data was received. */
     private val _calibrationFailed = MutableStateFlow(false)
     val calibrationFailed: StateFlow<Boolean> = _calibrationFailed.asStateFlow()
 
-    // Baseline statistics: bssid → (mean, variance)
+    // Baseline statistics per BSSID
     private val baselineMean = mutableMapOf<String, Float>()
     private val baselineVariance = mutableMapOf<String, Float>()
+    private val baselineJitter = mutableMapOf<String, Float>()   // mean |Δ| between consecutive samples
+    private val baselineEntropy = mutableMapOf<String, Float>()  // Shannon entropy of 1-dB bins
 
-    // Calibration accumulation: bssid → list of RSSI samples during the 60-s window.
-    // Guarded by `calibrationLock` because feedCalibration() and finishCalibration() run
-    // on different coroutines.
+    // Calibration accumulation (guarded by calibrationLock)
     private val calibrationLock = Any()
     private val calibrationSamples = mutableMapOf<String, MutableList<Float>>()
     private var calibrationStartMs = 0L
@@ -69,13 +75,31 @@ class StatisticalDetector @Inject constructor() {
 
     companion object {
         private const val CALIBRATION_WINDOW_MS = 60_000L       // 60 s
-        private const val ROLLING_WINDOW_SIZE = 10              // ~5 s at 2 Hz
-        private const val VARIANCE_RATIO_THRESHOLD = 2.0f
-        private const val MEAN_SHIFT_THRESHOLD = 3.0f           // dB
-        private const val FALL_DROP_THRESHOLD = 15f             // dB
-        private const val FALL_DROP_WINDOW_MS = 2_000L          // 2 s
+
+        // Rolling window: 20 samples ≈ 10 s at ~2 Hz — larger window = smoother detection
+        private const val ROLLING_WINDOW_SIZE = 20
+
+        // --- Feature thresholds (lowered for single-AP / phone-only scenarios) ---
+        private const val VARIANCE_RATIO_THRESHOLD = 1.5f       // was 2.0
+        private const val MEAN_SHIFT_THRESHOLD = 1.5f           // was 3.0 dB
+        private const val JITTER_RATIO_THRESHOLD = 1.8f         // jitter / baselineJitter
+        private const val ENTROPY_EXCESS_THRESHOLD = 0.3f       // nats above baseline
+
+        // Weighted vote: each feature casts a score, sum is compared to thresholds
+        private const val WEIGHT_VARIANCE = 1.0f
+        private const val WEIGHT_MEAN_SHIFT = 1.0f
+        private const val WEIGHT_JITTER = 1.2f                  // jitter is very responsive
+        private const val WEIGHT_ENTROPY = 0.8f
+
+        // Hysteresis: higher bar to *enter* PRESENCE than to *stay* in it
+        private const val VOTE_THRESHOLD_ENTER = 1.8f
+        private const val VOTE_THRESHOLD_STAY = 1.0f
+
+        // Fall detection
+        private const val FALL_DROP_THRESHOLD = 12f             // was 15 dB — more sensitive
+        private const val FALL_DROP_WINDOW_MS = 2_000L
         private const val FALL_FLATLINE_VARIANCE = 0.5f
-        private const val FALL_FLATLINE_WINDOW = 10             // ~5 s at 2 Hz
+        private const val FALL_FLATLINE_WINDOW = 10
     }
 
     // -----------------------------------------------------------------------
@@ -84,14 +108,16 @@ class StatisticalDetector @Inject constructor() {
 
     private data class RollingState(
         val window: ArrayDeque<Float> = ArrayDeque(ROLLING_WINDOW_SIZE + 1),
-        // Timestamps paired with RSSI for fall-drop detection
         val recentWithTime: ArrayDeque<Pair<Long, Float>> = ArrayDeque(),
-        // Flatline window after a detected drop
         val flatlineWindow: ArrayDeque<Float> = ArrayDeque(FALL_FLATLINE_WINDOW + 1),
-        var dropDetectedAtMs: Long = 0L
+        var dropDetectedAtMs: Long = 0L,
+        var prevRssi: Float = Float.NaN   // for jitter computation
     )
 
     private val rollingState = mutableMapOf<String, RollingState>()
+
+    // Global detection state for hysteresis
+    @Volatile private var lastDetectedState = PresenceState.EMPTY
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var calibrationJob: Job? = null
@@ -100,11 +126,6 @@ class StatisticalDetector @Inject constructor() {
     // Public API
     // -----------------------------------------------------------------------
 
-    /**
-     * Starts collecting calibration samples for 60 s.  Progress is emitted via
-     * [calibrationProgress].  After 60 s the baseline is locked and [isCalibrated]
-     * transitions to `true`.
-     */
     fun startCalibration() {
         calibrationJob?.cancel()
         synchronized(calibrationLock) { calibrationSamples.clear() }
@@ -114,9 +135,8 @@ class StatisticalDetector @Inject constructor() {
         _isCalibrated.value = false
         _calibrationSampleCount.value = 0
         _calibrationFailed.value = false
+        lastDetectedState = PresenceState.EMPTY
 
-        // Drive progress every second so the UI always advances even when Android
-        // throttles Wi-Fi scans and no RSSI data arrives.
         calibrationJob = scope.launch {
             val start = calibrationStartMs
             while (isActive) {
@@ -131,10 +151,6 @@ class StatisticalDetector @Inject constructor() {
         }
     }
 
-    /**
-     * Processes a stream of RSSI scan lists and emits [PresenceState] decisions.
-     * Also drives calibration progress when [startCalibration] has been called.
-     */
     fun analyze(rssiFlow: Flow<List<RssiData>>): Flow<PresenceState> =
         rssiFlow
             .runningFold(emptyList<RssiData>() to PresenceState.UNKNOWN) { (_, _), samples ->
@@ -164,8 +180,6 @@ class StatisticalDetector @Inject constructor() {
         isCalibrating = false
 
         synchronized(calibrationLock) {
-            // If no RSSI samples were collected, calibration cannot succeed — the device
-            // likely has no Wi-Fi connection.  Signal this to the UI instead of pretending.
             if (calibrationSamples.isEmpty()) {
                 _calibrationProgress.value = 1f
                 _calibrationFailed.value = true
@@ -177,7 +191,15 @@ class StatisticalDetector @Inject constructor() {
                 val mean = values.average().toFloat()
                 val variance = values.map { (it - mean) * (it - mean) }.average().toFloat()
                 baselineMean[bssid] = mean
-                baselineVariance[bssid] = variance.coerceAtLeast(0.1f) // avoid zero-division
+                baselineVariance[bssid] = variance.coerceAtLeast(0.1f)
+
+                // Baseline jitter: mean absolute consecutive difference
+                baselineJitter[bssid] = if (values.size >= 2) {
+                    values.zipWithNext { a, b -> abs(b - a) }.average().toFloat().coerceAtLeast(0.05f)
+                } else 0.1f
+
+                // Baseline entropy
+                baselineEntropy[bssid] = shannonEntropy(values).coerceAtLeast(0.01f)
             }
         }
         _calibrationProgress.value = 1f
@@ -185,11 +207,12 @@ class StatisticalDetector @Inject constructor() {
     }
 
     // -----------------------------------------------------------------------
-    // Detection helpers
+    // Detection
     // -----------------------------------------------------------------------
 
     private fun detect(samples: List<RssiData>, nowMs: Long): PresenceState {
-        var presenceVotes = 0
+        var totalScore = 0f
+        var apCount = 0
         var fallVotes = 0
 
         for (entry in samples) {
@@ -197,51 +220,91 @@ class StatisticalDetector @Inject constructor() {
             val rssi = entry.rssi.toFloat()
             val bMean = baselineMean[bssid] ?: continue
             val bVar = baselineVariance[bssid] ?: continue
+            val bJitter = baselineJitter[bssid] ?: 0.1f
+            val bEntropy = baselineEntropy[bssid] ?: 0.01f
             val state = rollingState.getOrPut(bssid) { RollingState() }
 
             // Update rolling window
             state.window.addLast(rssi)
             if (state.window.size > ROLLING_WINDOW_SIZE) state.window.removeFirst()
 
+            // Track consecutive difference for jitter
+            val jitterDelta = if (!state.prevRssi.isNaN()) abs(rssi - state.prevRssi) else 0f
+            state.prevRssi = rssi
+
             // Keep recent timed samples (last 2 s)
             state.recentWithTime.addLast(nowMs to rssi)
             state.recentWithTime.removeAll { nowMs - it.first > FALL_DROP_WINDOW_MS }
 
-            if (state.window.size < 3) continue
+            if (state.window.size < 5) continue
+            apCount++
 
             val curMean = state.window.average().toFloat()
             val curVar = state.window.map { (it - curMean) * (it - curMean) }.average().toFloat()
+            val curJitter = if (state.window.size >= 2)
+                state.window.zipWithNext { a, b -> abs(b - a) }.average().toFloat()
+            else 0f
+            val curEntropy = shannonEntropy(state.window.toList())
 
-            // --- Variance ratio ---
-            if (curVar > bVar * VARIANCE_RATIO_THRESHOLD) presenceVotes++
+            // --- Feature 1: Variance ratio ---
+            var apScore = 0f
+            if (curVar > bVar * VARIANCE_RATIO_THRESHOLD) {
+                apScore += WEIGHT_VARIANCE
+            }
 
-            // --- Mean shift ---
-            if (abs(curMean - bMean) > MEAN_SHIFT_THRESHOLD) presenceVotes++
+            // --- Feature 2: Mean shift ---
+            if (abs(curMean - bMean) > MEAN_SHIFT_THRESHOLD) {
+                apScore += WEIGHT_MEAN_SHIFT
+            }
 
-            // --- Fall heuristic ---
+            // --- Feature 3: Jitter (rate-of-change) ---
+            if (curJitter > bJitter * JITTER_RATIO_THRESHOLD) {
+                apScore += WEIGHT_JITTER
+            }
+
+            // --- Feature 4: Signal entropy ---
+            if (curEntropy - bEntropy > ENTROPY_EXCESS_THRESHOLD) {
+                apScore += WEIGHT_ENTROPY
+            }
+
+            totalScore += apScore
+
+            // --- Feature 5: Fall heuristic ---
             if (detectFall(state, rssi, nowMs)) fallVotes++
         }
 
-        return when {
+        // Normalise by AP count so multi-AP and single-AP scenarios are comparable
+        val normScore = if (apCount > 0) totalScore / apCount else 0f
+
+        // Hysteresis: if we're currently in PRESENCE, use a lower threshold to stay
+        val threshold = if (lastDetectedState == PresenceState.PRESENCE_DETECTED ||
+            lastDetectedState == PresenceState.MOVEMENT_DETECTED) {
+            VOTE_THRESHOLD_STAY
+        } else {
+            VOTE_THRESHOLD_ENTER
+        }
+
+        val result = when {
             fallVotes > 0 -> PresenceState.FALL_DETECTED
-            presenceVotes > 0 -> PresenceState.PRESENCE_DETECTED
+            normScore >= threshold * 1.5f -> PresenceState.MOVEMENT_DETECTED
+            normScore >= threshold -> PresenceState.PRESENCE_DETECTED
             _isCalibrated.value -> PresenceState.EMPTY
             else -> PresenceState.UNKNOWN
         }
+        lastDetectedState = result
+        return result
     }
 
     private fun detectFall(state: RollingState, currentRssi: Float, nowMs: Long): Boolean {
-        // Step 1: check for a sharp RSSI drop within the last 2 s
         if (state.recentWithTime.size >= 2) {
             val oldest = state.recentWithTime.first().second
-            val drop = oldest - currentRssi // positive = drop
+            val drop = oldest - currentRssi
             if (drop > FALL_DROP_THRESHOLD && state.dropDetectedAtMs == 0L) {
                 state.dropDetectedAtMs = nowMs
                 state.flatlineWindow.clear()
             }
         }
 
-        // Step 2: after a drop, accumulate flatline window
         if (state.dropDetectedAtMs > 0L) {
             state.flatlineWindow.addLast(currentRssi)
             if (state.flatlineWindow.size > FALL_FLATLINE_WINDOW) state.flatlineWindow.removeFirst()
@@ -250,14 +313,12 @@ class StatisticalDetector @Inject constructor() {
                 val flatMean = state.flatlineWindow.average().toFloat()
                 val flatVar = state.flatlineWindow.map { (it - flatMean) * (it - flatMean) }.average().toFloat()
                 if (flatVar < FALL_FLATLINE_VARIANCE) {
-                    // Fall confirmed — reset so we don't re-trigger indefinitely
                     state.dropDetectedAtMs = 0L
                     state.flatlineWindow.clear()
                     return true
                 }
             }
 
-            // Timeout: if drop was long ago without confirming flatline, reset
             if (nowMs - state.dropDetectedAtMs > 15_000L) {
                 state.dropDetectedAtMs = 0L
                 state.flatlineWindow.clear()
@@ -268,13 +329,22 @@ class StatisticalDetector @Inject constructor() {
     }
 
     // -----------------------------------------------------------------------
-    // Utility: variance of a list
+    // Utility: Shannon entropy of RSSI values (quantised to 1-dB bins)
     // -----------------------------------------------------------------------
 
-    @Suppress("unused")
-    private fun List<Float>.variance(): Float {
-        if (size < 2) return 0f
-        val mean = average().toFloat()
-        return map { (it - mean) * (it - mean) }.average().toFloat()
+    private fun shannonEntropy(values: List<Float>): Float {
+        if (values.size < 2) return 0f
+        val bins = mutableMapOf<Int, Int>()
+        for (v in values) {
+            val bin = v.toInt()
+            bins[bin] = (bins[bin] ?: 0) + 1
+        }
+        val n = values.size.toFloat()
+        var entropy = 0f
+        for ((_, count) in bins) {
+            val p = count / n
+            if (p > 0f) entropy -= p * ln(p)
+        }
+        return entropy
     }
 }

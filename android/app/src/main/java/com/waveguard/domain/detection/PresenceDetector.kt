@@ -128,7 +128,13 @@ class PresenceDetector @Inject constructor(
                     latestStatistical = state
                     if (!modelManager.isModelAvailable()) {
                         _presenceState.emit(state)
-                        _confidence.value = if (state != PresenceState.UNKNOWN) 0.65f else 0f
+                        _confidence.value = when (state) {
+                            PresenceState.UNKNOWN -> 0f
+                            PresenceState.EMPTY -> 0.70f
+                            PresenceState.PRESENCE_DETECTED -> 0.65f
+                            PresenceState.MOVEMENT_DETECTED -> 0.75f
+                            PresenceState.FALL_DETECTED -> 0.85f
+                        }
                     } else {
                         combine()
                     }

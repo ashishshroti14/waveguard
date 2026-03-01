@@ -304,7 +304,7 @@ fun DashboardScreen(
                             rssiHistory = rssiHistory,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(100.dp)
+                                .height(140.dp)
                         )
                     }
                 }

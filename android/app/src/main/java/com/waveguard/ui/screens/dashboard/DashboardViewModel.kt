@@ -119,7 +119,7 @@ class DashboardViewModel @Inject constructor(
                         _signalStrength.value = avgRssi
                         val history = _rssiHistory.value.toMutableList()
                         history.add(avgRssi)
-                        if (history.size > 60) history.removeAt(0)
+                        if (history.size > 120) history.removeAt(0)
                         _rssiHistory.value = history
                     }
                 }
