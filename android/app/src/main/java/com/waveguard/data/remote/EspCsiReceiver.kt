@@ -227,8 +227,8 @@ class EspCsiReceiver @Inject constructor(
      */
     private fun parseCsiPacket(bytes: ByteArray): CsiData? {
         val expectedSize = 4 + 4 + 2 + 2 + (52 * 4) + (52 * 4) // 428
-        if (bytes.size < expectedSize) {
-            Log.w(TAG, "Packet too short: ${bytes.size} < $expectedSize bytes")
+        if (bytes.size != expectedSize) {
+            Log.w(TAG, "Unexpected packet size: ${bytes.size} (expected $expectedSize bytes)")
             return null
         }
         return try {

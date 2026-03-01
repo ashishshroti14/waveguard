@@ -8,6 +8,7 @@ import com.waveguard.domain.ml.ModelManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -59,7 +60,7 @@ class PresenceDetector @Inject constructor(
         private const val DEFAULT_EMPTY_STATE_CONFIDENCE = 0.5f
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @Volatile private var isStarted = false
 
@@ -194,14 +195,31 @@ class PresenceDetector @Inject constructor(
                 .filter { it }
                 .take(1)
                 .collect {
-                    if (_presenceState.replayCache.isEmpty() ||
-                        _presenceState.replayCache.last() == PresenceState.UNKNOWN
-                    ) {
+                    val cache = _presenceState.replayCache
+                    if (cache.isEmpty() || cache.lastOrNull() == PresenceState.UNKNOWN) {
                         _presenceState.emit(PresenceState.EMPTY)
                         _confidence.value = DEFAULT_EMPTY_STATE_CONFIDENCE
                     }
                 }
         }
+    }
+
+    /**
+     * Stops the detection engine, cancelling all running coroutines.
+     * A subsequent [start] call will re-initialise from scratch.
+     */
+    fun stop() {
+        if (!isStarted) return
+        isStarted = false
+        scope.cancel()
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        latestStatistical = PresenceState.UNKNOWN
+        latestMl = PresenceState.UNKNOWN
+        latestActivity = ActivityType.UNKNOWN
+        latestFall = false
+        latestFallConf = 0f
+        latestAnomaly = false
+        _confidence.value = 0f
     }
 
     // -----------------------------------------------------------------------

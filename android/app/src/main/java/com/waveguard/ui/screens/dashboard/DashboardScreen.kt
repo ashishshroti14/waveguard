@@ -1,5 +1,9 @@
 package com.waveguard.ui.screens.dashboard
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -83,6 +87,17 @@ fun DashboardScreen(
     val calibrationFailed by viewModel.calibrationFailed.collectAsStateWithLifecycle()
     val noWifiAtStart by viewModel.noWifiAtStart.collectAsStateWithLifecycle()
 
+    // Request location permission before starting monitoring — required for Wi-Fi scanning.
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        // Whether or not permissions were granted, try to start monitoring.
+        // networkCapabilitiesRssi() works without location, so the app can still
+        // attempt to function.  The WiFi pre-check in the ViewModel will catch the
+        // no-WiFi case.
+        viewModel.startMonitoring()
+    }
+
     Scaffold(
         containerColor = NavyBackground,
         topBar = {
@@ -120,8 +135,19 @@ fun DashboardScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = {
-                    if (isMonitoring) viewModel.stopMonitoring()
-                    else viewModel.startMonitoring()
+                    if (isMonitoring) {
+                        viewModel.stopMonitoring()
+                    } else {
+                        // Request location + notification permissions, then start monitoring
+                        val perms = mutableListOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        permissionLauncher.launch(perms.toTypedArray())
+                    }
                 },
                 containerColor = if (isMonitoring) RedAlert else CyanActive,
                 contentColor = NavyBackground,

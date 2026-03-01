@@ -104,35 +104,39 @@ class DashboardViewModel @Inject constructor(
             csiFlow = sensorRepository.csiData
         )
 
-        // Collect RSSI stream and maintain rolling history of 60 samples
+        // Collect RSSI stream and maintain rolling history of 60 samples.
+        // All monitoring coroutines are children of monitoringJob so they are
+        // cancelled together when stopMonitoring() is called.
         monitoringJob = viewModelScope.launch {
-            sensorRepository.rssiData.collect { rssiList ->
-                if (rssiList.isNotEmpty()) {
-                    val avgRssi = rssiList.map { it.rssi }.average().toFloat()
-                    _signalStrength.value = avgRssi
-                    val history = _rssiHistory.value.toMutableList()
-                    history.add(avgRssi)
-                    if (history.size > 60) history.removeAt(0)
-                    _rssiHistory.value = history
+            launch {
+                sensorRepository.rssiData.collect { rssiList ->
+                    if (rssiList.isNotEmpty()) {
+                        val avgRssi = rssiList.map { it.rssi }.average().toFloat()
+                        _signalStrength.value = avgRssi
+                        val history = _rssiHistory.value.toMutableList()
+                        history.add(avgRssi)
+                        if (history.size > 60) history.removeAt(0)
+                        _rssiHistory.value = history
+                    }
                 }
             }
-        }
 
-        viewModelScope.launch {
-            presenceDetector.presenceState.collect { state ->
-                _presenceState.value = state
+            launch {
+                presenceDetector.presenceState.collect { state ->
+                    _presenceState.value = state
+                }
             }
-        }
 
-        viewModelScope.launch {
-            presenceDetector.activityType.collect { activity ->
-                _activityType.value = activity
+            launch {
+                presenceDetector.activityType.collect { activity ->
+                    _activityType.value = activity
+                }
             }
-        }
 
-        viewModelScope.launch {
-            presenceDetector.confidence.collect { conf ->
-                _confidence.value = conf
+            launch {
+                presenceDetector.confidence.collect { conf ->
+                    _confidence.value = conf
+                }
             }
         }
     }
@@ -142,19 +146,31 @@ class DashboardViewModel @Inject constructor(
         monitoringJob = null
         _isMonitoring.value = false
         _noWifiAtStart.value = false
+
+        // Reset UI-visible state so the next start is clean
+        _presenceState.value = PresenceState.UNKNOWN
+        _activityType.value = ActivityType.UNKNOWN
+        _confidence.value = 0f
+        _signalStrength.value = 0f
+        _rssiHistory.value = emptyList()
+
+        // Stop the detection engine so it can be re-started fresh
+        presenceDetector.stop()
         context.startService(WaveGuardService.stopIntent(context))
     }
 
     /**
      * Returns true when the device has an active Wi-Fi client connection (TRANSPORT_WIFI).
-     * When the phone is in hotspot / AP mode it is NOT a Wi-Fi client.
+     * Checks all networks because the system may prefer cellular as default even when
+     * a Wi-Fi connection exists.
      */
     private fun isWifiConnected(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
-        val network = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(network) ?: return false
-        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        return cm.allNetworks.any { network ->
+            cm.getNetworkCapabilities(network)
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        }
     }
 
     override fun onCleared() {

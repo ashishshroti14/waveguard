@@ -69,13 +69,27 @@ class AlertEngine @Inject constructor(
         confidenceFlow: Flow<Float>? = null
     ) {
         scope.launch {
-            presenceFlow
-                .combine(activityFlow) { presence, activity -> presence to activity }
-                .onEach { (presence, activity) ->
-                    evaluate(presence, activity, confidence = 1f)
-                }
-                .catch { /* log silently */ }
-                .collect()
+            if (confidenceFlow != null) {
+                // Combine presence + activity + confidence into a single stream
+                presenceFlow
+                    .combine(activityFlow) { presence, activity -> presence to activity }
+                    .combine(confidenceFlow) { (presence, activity), conf ->
+                        Triple(presence, activity, conf)
+                    }
+                    .onEach { (presence, activity, conf) ->
+                        evaluate(presence, activity, confidence = conf)
+                    }
+                    .catch { /* log silently */ }
+                    .collect()
+            } else {
+                presenceFlow
+                    .combine(activityFlow) { presence, activity -> presence to activity }
+                    .onEach { (presence, activity) ->
+                        evaluate(presence, activity, confidence = 1f)
+                    }
+                    .catch { /* log silently */ }
+                    .collect()
+            }
         }
     }
 

@@ -55,7 +55,10 @@ class StatisticalDetector @Inject constructor() {
     private val baselineMean = mutableMapOf<String, Float>()
     private val baselineVariance = mutableMapOf<String, Float>()
 
-    // Calibration accumulation: bssid → list of RSSI samples during the 60-s window
+    // Calibration accumulation: bssid → list of RSSI samples during the 60-s window.
+    // Guarded by `calibrationLock` because feedCalibration() and finishCalibration() run
+    // on different coroutines.
+    private val calibrationLock = Any()
     private val calibrationSamples = mutableMapOf<String, MutableList<Float>>()
     private var calibrationStartMs = 0L
     @Volatile private var isCalibrating = false
@@ -104,7 +107,7 @@ class StatisticalDetector @Inject constructor() {
      */
     fun startCalibration() {
         calibrationJob?.cancel()
-        calibrationSamples.clear()
+        synchronized(calibrationLock) { calibrationSamples.clear() }
         calibrationStartMs = System.currentTimeMillis()
         isCalibrating = true
         _calibrationProgress.value = 0f
@@ -149,29 +152,33 @@ class StatisticalDetector @Inject constructor() {
     // -----------------------------------------------------------------------
 
     private fun feedCalibration(samples: List<RssiData>) {
-        for (entry in samples) {
-            calibrationSamples.getOrPut(entry.bssid) { mutableListOf() }.add(entry.rssi.toFloat())
+        synchronized(calibrationLock) {
+            for (entry in samples) {
+                calibrationSamples.getOrPut(entry.bssid) { mutableListOf() }.add(entry.rssi.toFloat())
+            }
+            _calibrationSampleCount.value = calibrationSamples.values.sumOf { it.size }
         }
-        _calibrationSampleCount.value = calibrationSamples.values.sumOf { it.size }
     }
 
     private fun finishCalibration() {
         isCalibrating = false
 
-        // If no RSSI samples were collected, calibration cannot succeed — the device
-        // likely has no Wi-Fi connection.  Signal this to the UI instead of pretending.
-        if (calibrationSamples.isEmpty()) {
-            _calibrationProgress.value = 1f
-            _calibrationFailed.value = true
-            return
-        }
+        synchronized(calibrationLock) {
+            // If no RSSI samples were collected, calibration cannot succeed — the device
+            // likely has no Wi-Fi connection.  Signal this to the UI instead of pretending.
+            if (calibrationSamples.isEmpty()) {
+                _calibrationProgress.value = 1f
+                _calibrationFailed.value = true
+                return
+            }
 
-        for ((bssid, values) in calibrationSamples) {
-            if (values.size < 2) continue
-            val mean = values.average().toFloat()
-            val variance = values.map { (it - mean) * (it - mean) }.average().toFloat()
-            baselineMean[bssid] = mean
-            baselineVariance[bssid] = variance.coerceAtLeast(0.1f) // avoid zero-division
+            for ((bssid, values) in calibrationSamples) {
+                if (values.size < 2) continue
+                val mean = values.average().toFloat()
+                val variance = values.map { (it - mean) * (it - mean) }.average().toFloat()
+                baselineMean[bssid] = mean
+                baselineVariance[bssid] = variance.coerceAtLeast(0.1f) // avoid zero-division
+            }
         }
         _calibrationProgress.value = 1f
         _isCalibrated.value = true

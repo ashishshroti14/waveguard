@@ -184,18 +184,23 @@ class RssiScanner @Inject constructor(
         return try {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 ?: return null
-            val network = cm.activeNetwork ?: return null
-            val caps = cm.getNetworkCapabilities(network) ?: return null
-            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
-            val rssi = caps.signalStrength
-            if (rssi == Int.MIN_VALUE || rssi < MIN_VALID_RSSI || rssi > MAX_VALID_RSSI) return null
-            RssiData(
-                timestamp = System.currentTimeMillis(),
-                bssid = "active_ap",
-                ssid = "Connected",
-                rssi = rssi,
-                frequency = 0
-            )
+            // Check all networks, not just activeNetwork, because the system may prefer
+            // cellular as the default even when a Wi-Fi connection exists.
+            val networks = cm.allNetworks
+            for (network in networks) {
+                val caps = cm.getNetworkCapabilities(network) ?: continue
+                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+                val rssi = caps.signalStrength
+                if (rssi == Int.MIN_VALUE || rssi < MIN_VALID_RSSI || rssi > MAX_VALID_RSSI) continue
+                return RssiData(
+                    timestamp = System.currentTimeMillis(),
+                    bssid = "active_ap",
+                    ssid = "Connected",
+                    rssi = rssi,
+                    frequency = 0
+                )
+            }
+            null
         } catch (e: Exception) {
             null
         }

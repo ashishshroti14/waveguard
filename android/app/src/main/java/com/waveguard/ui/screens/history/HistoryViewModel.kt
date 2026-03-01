@@ -28,8 +28,12 @@ class HistoryViewModel @Inject constructor(
 
     private fun loadAlerts() {
         viewModelScope.launch {
-            alertRepository.getAllAlerts().collect { alertList ->
-                _alerts.value = alertList
+            try {
+                alertRepository.getAllAlerts().collect { alertList ->
+                    _alerts.value = alertList
+                    _isLoading.value = false
+                }
+            } catch (_: Exception) {
                 _isLoading.value = false
             }
         }
