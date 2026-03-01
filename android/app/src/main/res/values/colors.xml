@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary palette -->
+    <color name="navy_background">#0A1628</color>
+    <color name="cyan_active">#00E5FF</color>
+    <color name="green_safe">#00E676</color>
+    <color name="red_alert">#FF1744</color>
+    <color name="amber_warning">#FFD740</color>
+
+    <!-- Surfaces -->
+    <color name="surface_dark">#0D1F3C</color>
+    <color name="card_dark">#112244</color>
+
+    <!-- Text -->
+    <color name="text_primary">#E8F4FD</color>
+    <color name="text_secondary">#8CA0B8</color>
+</resources>
