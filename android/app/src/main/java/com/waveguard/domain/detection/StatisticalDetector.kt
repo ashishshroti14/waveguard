@@ -76,7 +76,7 @@ class StatisticalDetector @Inject constructor() {
     companion object {
         private const val CALIBRATION_WINDOW_MS = 60_000L       // 60 s
 
-        // Rolling window: 20 samples ≈ 10 s at ~2 Hz — larger window = smoother detection
+        // Rolling window: 20 samples ≈ 20 s at ~1 Hz — larger window = smoother detection
         private const val ROLLING_WINDOW_SIZE = 20
 
         // --- Feature thresholds (lowered for single-AP / phone-only scenarios) ---
@@ -228,8 +228,7 @@ class StatisticalDetector @Inject constructor() {
             state.window.addLast(rssi)
             if (state.window.size > ROLLING_WINDOW_SIZE) state.window.removeFirst()
 
-            // Track consecutive difference for jitter
-            val jitterDelta = if (!state.prevRssi.isNaN()) abs(rssi - state.prevRssi) else 0f
+            // Track previous RSSI for future per-sample analysis
             state.prevRssi = rssi
 
             // Keep recent timed samples (last 2 s)
