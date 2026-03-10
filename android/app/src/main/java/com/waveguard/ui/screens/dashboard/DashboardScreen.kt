@@ -4,9 +4,8 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
@@ -94,6 +92,16 @@ fun DashboardScreen(
     val calibrationSampleCount by viewModel.calibrationSampleCount.collectAsStateWithLifecycle()
     val calibrationFailed by viewModel.calibrationFailed.collectAsStateWithLifecycle()
     val noWifiAtStart by viewModel.noWifiAtStart.collectAsStateWithLifecycle()
+    val ruViewSource by viewModel.ruViewSource.collectAsStateWithLifecycle()
+    val ruViewMeanRssi by viewModel.ruViewMeanRssi.collectAsStateWithLifecycle()
+    val ruViewVariance by viewModel.ruViewVariance.collectAsStateWithLifecycle()
+    val ruViewMotionBandPower by viewModel.ruViewMotionBandPower.collectAsStateWithLifecycle()
+    val ruViewBreathingBandPower by viewModel.ruViewBreathingBandPower.collectAsStateWithLifecycle()
+    val ruViewSpectralPower by viewModel.ruViewSpectralPower.collectAsStateWithLifecycle()
+    val ruViewDominantFreqHz by viewModel.ruViewDominantFreqHz.collectAsStateWithLifecycle()
+    val ruViewChangePoints by viewModel.ruViewChangePoints.collectAsStateWithLifecycle()
+    val ruViewMotionLevel by viewModel.ruViewMotionLevel.collectAsStateWithLifecycle()
+    val ruViewClassificationConfidence by viewModel.ruViewClassificationConfidence.collectAsStateWithLifecycle()
 
     // Request location permission before starting monitoring — required for Wi-Fi scanning.
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -276,7 +284,6 @@ fun DashboardScreen(
             // Room status + activity
             item {
                 RoomStatusRow(
-                    presenceState = presenceState,
                     activityType = activityType,
                     signalStrength = signalStrength,
                     activeSourceCount = activeSourceCount,
@@ -353,6 +360,22 @@ fun DashboardScreen(
                 }
             }
 
+            item {
+                RuViewInsightsCard(
+                    isMonitoring = isMonitoring,
+                    source = ruViewSource,
+                    meanRssi = ruViewMeanRssi,
+                    variance = ruViewVariance,
+                    motionBandPower = ruViewMotionBandPower,
+                    breathingBandPower = ruViewBreathingBandPower,
+                    spectralPower = ruViewSpectralPower,
+                    motionLevel = ruViewMotionLevel,
+                    confidence = ruViewClassificationConfidence,
+                    dominantFreqHz = ruViewDominantFreqHz,
+                    changePoints = ruViewChangePoints
+                )
+            }
+
             // Recent alerts
             item {
                 Text(
@@ -398,7 +421,6 @@ fun DashboardScreen(
 
 @Composable
 private fun RoomStatusRow(
-    presenceState: PresenceState,
     activityType: ActivityType,
     signalStrength: Float,
     activeSourceCount: Int,
@@ -470,6 +492,13 @@ private fun RoomStatusRow(
                     text = "$activeSourceCount / 3 sources",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Recalibrate",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CyanActive,
+                    modifier = Modifier.clickable { onRecalibrate() }
                 )
             }
         }
@@ -627,6 +656,200 @@ private fun LegendItem(
 }
 
 @Composable
+private fun RuViewInsightsCard(
+    isMonitoring: Boolean,
+    source: String?,
+    meanRssi: Float?,
+    variance: Float?,
+    motionBandPower: Float?,
+    breathingBandPower: Float?,
+    spectralPower: Float?,
+    motionLevel: String?,
+    confidence: Float?,
+    dominantFreqHz: Float?,
+    changePoints: Int?
+) {
+    val (sourceLabel, sourceColor) = source.toSourceStatus(isMonitoring)
+    val classLabel = motionLevel.toMotionClassLabel()
+    val classColor = motionLevel.toMotionClassColor()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardDark),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "RuView Live Insights",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = sourceLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = sourceColor,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = meanRssi?.let { "${it.toInt()} dBm" } ?: "-- dBm",
+                style = MaterialTheme.typography.headlineMedium,
+                color = CyanActive,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            FeatureMeterRow(
+                label = "Variance",
+                value = variance,
+                max = 10f,
+                tint = CyanActive
+            )
+            FeatureMeterRow(
+                label = "Motion Band",
+                value = motionBandPower,
+                max = 0.5f,
+                tint = RedAlert
+            )
+            FeatureMeterRow(
+                label = "Breathing",
+                value = breathingBandPower,
+                max = 0.3f,
+                tint = CyanActive
+            )
+            FeatureMeterRow(
+                label = "Spectral",
+                value = spectralPower,
+                max = 2500f,
+                tint = AmberWarning
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = classColor.copy(alpha = 0.15f),
+                        shape = MaterialTheme.shapes.medium
+                    )
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = classLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = classColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            FeatureMeterRow(
+                label = "Confidence",
+                value = confidence?.times(100f),
+                max = 100f,
+                tint = GreenSafe
+            ) { value -> "${value.toInt()}%" }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            MetricDetailRow(
+                label = "Dominant Freq",
+                value = dominantFreqHz?.let { String.format(Locale.getDefault(), "%.3f Hz", it) } ?: "-- Hz"
+            )
+            MetricDetailRow(
+                label = "Change Points",
+                value = changePoints?.toString() ?: "--"
+            )
+            MetricDetailRow(
+                label = "Sample Source",
+                value = source?.replace('_', ' ')?.uppercase(Locale.getDefault()) ?: "--"
+            )
+        }
+    }
+}
+
+@Composable
+private fun FeatureMeterRow(
+    label: String,
+    value: Float?,
+    max: Float,
+    tint: Color,
+    formatter: (Float) -> String = { String.format(Locale.getDefault(), "%.3f", it) }
+) {
+    val normalized = if (value == null || max <= 0f) 0f else (value / max).coerceIn(0f, 1f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            modifier = Modifier.width(96.dp)
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(6.dp)
+                .background(
+                    color = SurfaceDark,
+                    shape = MaterialTheme.shapes.extraSmall
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(normalized)
+                    .height(6.dp)
+                    .background(
+                        color = tint,
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = value?.let(formatter) ?: "--",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSecondary,
+            modifier = Modifier.width(60.dp)
+        )
+    }
+}
+
+@Composable
+private fun MetricDetailRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelMedium,
+            color = TextPrimary
+        )
+    }
+}
+
+@Composable
 private fun AlertRow(alert: AlertEvent) {
     val alertColor = alertTypeToColor(alert.type)
     val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -701,6 +924,38 @@ private fun ActivityType.toEmoji(): String = when (this) {
     ActivityType.WALKING -> "🚶"
     ActivityType.FALLING -> "⚠️"
     ActivityType.UNKNOWN -> "❓"
+}
+
+private fun String?.toSourceStatus(isMonitoring: Boolean): Pair<String, Color> {
+    if (!isMonitoring) return "Monitoring off" to TextSecondary
+    if (this == null) return "Waiting for feed" to TextSecondary
+
+    val normalized = this.lowercase(Locale.getDefault())
+    return when {
+        normalized.contains("reconnect") || normalized.contains("connect") ->
+            "Reconnecting..." to AmberWarning
+
+        normalized.contains("sim") ->
+            "Simulated feed" to AmberWarning
+
+        normalized.contains("offline") || normalized.contains("disconnect") ->
+            "Disconnected" to RedAlert
+
+        else ->
+            "Live node feed" to GreenSafe
+    }
+}
+
+private fun String?.toMotionClassLabel(): String {
+    if (this.isNullOrBlank()) return "UNKNOWN"
+    return this.replace('_', ' ').uppercase(Locale.getDefault())
+}
+
+private fun String?.toMotionClassColor(): Color = when (this?.lowercase(Locale.getDefault())) {
+    "absent" -> CyanActive
+    "present_still" -> GreenSafe
+    "active" -> RedAlert
+    else -> AmberWarning
 }
 
 private fun alertTypeToColor(type: String): Color = when (type) {

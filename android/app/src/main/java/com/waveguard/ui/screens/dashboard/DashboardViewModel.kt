@@ -52,6 +52,36 @@ class DashboardViewModel @Inject constructor(
     private val _activeSourceCount = MutableStateFlow(0)
     val activeSourceCount: StateFlow<Int> = _activeSourceCount.asStateFlow()
 
+    private val _ruViewSource = MutableStateFlow<String?>(null)
+    val ruViewSource: StateFlow<String?> = _ruViewSource.asStateFlow()
+
+    private val _ruViewMeanRssi = MutableStateFlow<Float?>(null)
+    val ruViewMeanRssi: StateFlow<Float?> = _ruViewMeanRssi.asStateFlow()
+
+    private val _ruViewVariance = MutableStateFlow<Float?>(null)
+    val ruViewVariance: StateFlow<Float?> = _ruViewVariance.asStateFlow()
+
+    private val _ruViewMotionBandPower = MutableStateFlow<Float?>(null)
+    val ruViewMotionBandPower: StateFlow<Float?> = _ruViewMotionBandPower.asStateFlow()
+
+    private val _ruViewBreathingBandPower = MutableStateFlow<Float?>(null)
+    val ruViewBreathingBandPower: StateFlow<Float?> = _ruViewBreathingBandPower.asStateFlow()
+
+    private val _ruViewSpectralPower = MutableStateFlow<Float?>(null)
+    val ruViewSpectralPower: StateFlow<Float?> = _ruViewSpectralPower.asStateFlow()
+
+    private val _ruViewDominantFreqHz = MutableStateFlow<Float?>(null)
+    val ruViewDominantFreqHz: StateFlow<Float?> = _ruViewDominantFreqHz.asStateFlow()
+
+    private val _ruViewChangePoints = MutableStateFlow<Int?>(null)
+    val ruViewChangePoints: StateFlow<Int?> = _ruViewChangePoints.asStateFlow()
+
+    private val _ruViewMotionLevel = MutableStateFlow<String?>(null)
+    val ruViewMotionLevel: StateFlow<String?> = _ruViewMotionLevel.asStateFlow()
+
+    private val _ruViewClassificationConfidence = MutableStateFlow<Float?>(null)
+    val ruViewClassificationConfidence: StateFlow<Float?> = _ruViewClassificationConfidence.asStateFlow()
+
     private val _recentAlerts = MutableStateFlow<List<AlertEvent>>(emptyList())
     val recentAlerts: StateFlow<List<AlertEvent>> = _recentAlerts.asStateFlow()
 
@@ -182,6 +212,21 @@ class DashboardViewModel @Inject constructor(
             }
 
             launch {
+                sensorRepository.ruViewTelemetry.collect { telemetry ->
+                    _ruViewSource.value = telemetry?.source
+                    _ruViewMeanRssi.value = telemetry?.meanRssi
+                    _ruViewVariance.value = telemetry?.variance
+                    _ruViewMotionBandPower.value = telemetry?.motionBandPower
+                    _ruViewBreathingBandPower.value = telemetry?.breathingBandPower
+                    _ruViewSpectralPower.value = telemetry?.spectralPower
+                    _ruViewDominantFreqHz.value = telemetry?.dominantFreqHz
+                    _ruViewChangePoints.value = telemetry?.changePoints
+                    _ruViewMotionLevel.value = telemetry?.motionLevel
+                    _ruViewClassificationConfidence.value = telemetry?.confidence
+                }
+            }
+
+            launch {
                 presenceDetector.presenceState.collect { state ->
                     _presenceState.value = state
                 }
@@ -220,6 +265,16 @@ class DashboardViewModel @Inject constructor(
         _phoneRssiHistory.value = emptyList()
         _node1RssiHistory.value = emptyList()
         _node2RssiHistory.value = emptyList()
+        _ruViewSource.value = null
+        _ruViewMeanRssi.value = null
+        _ruViewVariance.value = null
+        _ruViewMotionBandPower.value = null
+        _ruViewBreathingBandPower.value = null
+        _ruViewSpectralPower.value = null
+        _ruViewDominantFreqHz.value = null
+        _ruViewChangePoints.value = null
+        _ruViewMotionLevel.value = null
+        _ruViewClassificationConfidence.value = null
 
         // Stop the detection engine so it can be re-started fresh
         presenceDetector.stop()

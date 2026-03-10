@@ -5,6 +5,7 @@ import com.waveguard.data.local.CsiDao
 import com.waveguard.data.local.CsiDataEntity
 import com.waveguard.data.model.CsiData
 import com.waveguard.data.model.RssiData
+import com.waveguard.data.model.RuViewTelemetryData
 import com.waveguard.data.remote.EspCsiReceiver
 import com.waveguard.data.remote.RssiScanner
 import com.waveguard.data.remote.RuViewNodeReceiver
@@ -77,6 +78,17 @@ class SensorRepository @Inject constructor(
         mergeRssiSources(phoneRssi, nodeRssi)
     }
         .catch { e -> Log.e(TAG, "RSSI flow error", e) }
+        .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000))
+
+    /**
+     * Latest RuView feature/classification telemetry for dashboard visualization.
+     */
+    val ruViewTelemetry: Flow<RuViewTelemetryData?> = ruViewNodeReceiver.telemetryFlow
+        .onStart { emit(null) }
+        .catch { e ->
+            Log.e(TAG, "RuView telemetry flow error", e)
+            emit(null)
+        }
         .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000))
 
     // ------------------------------------------------------------------
