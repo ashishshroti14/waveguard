@@ -17,6 +17,12 @@ import com.waveguard.ui.theme.SurfaceDark
 import kotlin.math.ceil
 import kotlin.math.floor
 
+data class SignalSeries(
+    val name: String,
+    val values: List<Float>,
+    val color: Color
+)
+
 /**
  * Canvas-based real-time line graph for RSSI signal history.
  *
@@ -32,10 +38,17 @@ fun SignalStrengthGraph(
     rssiHistory: List<Float>,
     modifier: Modifier = Modifier,
     lineColor: Color = CyanActive,
-    gridColor: Color = SurfaceDark
+    gridColor: Color = SurfaceDark,
+    extraSeries: List<SignalSeries> = emptyList()
 ) {
     Canvas(modifier = modifier) {
-        if (rssiHistory.isEmpty()) {
+        val allSeries = buildList {
+            add(SignalSeries(name = "Combined", values = rssiHistory, color = lineColor))
+            addAll(extraSeries.filter { it.values.isNotEmpty() })
+        }
+
+        val allValues = allSeries.flatMap { it.values }
+        if (allValues.isEmpty()) {
             drawEmptyGrid(gridColor)
             return@Canvas
         }
@@ -46,10 +59,10 @@ fun SignalStrengthGraph(
         // ---- Auto-scale Y axis ----
         val dataMin: Float
         val dataMax: Float
-        if (rssiHistory.size >= 3) {
+        if (allValues.size >= 3) {
             val margin = 5f
-            dataMin = floor((rssiHistory.min() - margin) / 5f) * 5f
-            dataMax = ceil((rssiHistory.max() + margin) / 5f) * 5f
+            dataMin = floor((allValues.min() - margin) / 5f) * 5f
+            dataMax = ceil((allValues.max() + margin) / 5f) * 5f
         } else {
             dataMin = -95f
             dataMax = -20f
@@ -60,38 +73,52 @@ fun SignalStrengthGraph(
         drawGrid(gridColor, 4)
 
         // ---- Map data to screen points ----
-        val points = rssiHistory.mapIndexed { index, rssi ->
-            val x = if (rssiHistory.size == 1) width / 2f
-            else width * index / (rssiHistory.size - 1).toFloat()
-            val normalised = ((rssi - dataMin) / range).coerceIn(0f, 1f)
-            val y = height * (1f - normalised)
-            Offset(x, y)
-        }
+        val primaryPoints = toGraphPoints(
+            values = rssiHistory,
+            width = width,
+            height = height,
+            min = dataMin,
+            range = range
+        )
 
         // ---- Filled area ----
-        val fillPath = Path().apply {
-            moveTo(points.first().x, height)
-            points.forEach { lineTo(it.x, it.y) }
-            lineTo(points.last().x, height)
-            close()
-        }
-        drawPath(fillPath, color = lineColor.copy(alpha = 0.15f))
-
-        // ---- Signal line ----
-        val linePath = Path().apply {
-            points.forEachIndexed { i, point ->
-                if (i == 0) moveTo(point.x, point.y) else lineTo(point.x, point.y)
+        if (primaryPoints.isNotEmpty()) {
+            val fillPath = Path().apply {
+                moveTo(primaryPoints.first().x, height)
+                primaryPoints.forEach { lineTo(it.x, it.y) }
+                lineTo(primaryPoints.last().x, height)
+                close()
             }
+            drawPath(fillPath, color = lineColor.copy(alpha = 0.15f))
         }
-        drawPath(
-            path = linePath,
-            color = lineColor,
-            style = Stroke(
-                width = 2.5.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
+
+        // ---- Signal lines ----
+        allSeries.forEachIndexed { index, series ->
+            val points = toGraphPoints(
+                values = series.values,
+                width = width,
+                height = height,
+                min = dataMin,
+                range = range
             )
-        )
+            if (points.isEmpty()) return@forEachIndexed
+
+            val linePath = Path().apply {
+                points.forEachIndexed { i, point ->
+                    if (i == 0) moveTo(point.x, point.y) else lineTo(point.x, point.y)
+                }
+            }
+
+            drawPath(
+                path = linePath,
+                color = series.color.copy(alpha = if (index == 0) 1f else 0.9f),
+                style = Stroke(
+                    width = if (index == 0) 2.5.dp.toPx() else 2.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
+        }
 
         // ---- Baseline reference (mean of all data) as dashed line ----
         if (rssiHistory.size >= 5) {
@@ -106,18 +133,36 @@ fun SignalStrengthGraph(
             )
         }
 
-        // ---- Latest value dot with glow ----
-        if (points.isNotEmpty()) {
+        // ---- Latest value dot with glow (combined series) ----
+        if (primaryPoints.isNotEmpty()) {
             drawCircle(
                 color = lineColor.copy(alpha = 0.3f),
                 radius = 7.dp.toPx(),
-                center = points.last()
+                center = primaryPoints.last()
             )
             drawCircle(
                 color = lineColor,
                 radius = 4.dp.toPx(),
-                center = points.last()
+                center = primaryPoints.last()
             )
+        }
+
+        // Draw small markers for latest node series values.
+        extraSeries.forEach { series ->
+            val points = toGraphPoints(
+                values = series.values,
+                width = width,
+                height = height,
+                min = dataMin,
+                range = range
+            )
+            if (points.isNotEmpty()) {
+                drawCircle(
+                    color = series.color,
+                    radius = 3.dp.toPx(),
+                    center = points.last()
+                )
+            }
         }
     }
 }
@@ -137,4 +182,21 @@ private fun DrawScope.drawGrid(gridColor: Color, divisions: Int) {
 
 private fun DrawScope.drawEmptyGrid(gridColor: Color) {
     drawGrid(gridColor, 4)
+}
+
+private fun toGraphPoints(
+    values: List<Float>,
+    width: Float,
+    height: Float,
+    min: Float,
+    range: Float
+): List<Offset> {
+    if (values.isEmpty()) return emptyList()
+    return values.mapIndexed { index, rssi ->
+        val x = if (values.size == 1) width / 2f
+        else width * index / (values.size - 1).toFloat()
+        val normalised = ((rssi - min) / range).coerceIn(0f, 1f)
+        val y = height * (1f - normalised)
+        Offset(x, y)
+    }
 }

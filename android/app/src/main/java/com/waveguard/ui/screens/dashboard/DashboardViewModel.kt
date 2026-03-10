@@ -40,6 +40,18 @@ class DashboardViewModel @Inject constructor(
     private val _signalStrength = MutableStateFlow(0f)
     val signalStrength: StateFlow<Float> = _signalStrength.asStateFlow()
 
+    private val _phoneSignalStrength = MutableStateFlow<Float?>(null)
+    val phoneSignalStrength: StateFlow<Float?> = _phoneSignalStrength.asStateFlow()
+
+    private val _node1SignalStrength = MutableStateFlow<Float?>(null)
+    val node1SignalStrength: StateFlow<Float?> = _node1SignalStrength.asStateFlow()
+
+    private val _node2SignalStrength = MutableStateFlow<Float?>(null)
+    val node2SignalStrength: StateFlow<Float?> = _node2SignalStrength.asStateFlow()
+
+    private val _activeSourceCount = MutableStateFlow(0)
+    val activeSourceCount: StateFlow<Int> = _activeSourceCount.asStateFlow()
+
     private val _recentAlerts = MutableStateFlow<List<AlertEvent>>(emptyList())
     val recentAlerts: StateFlow<List<AlertEvent>> = _recentAlerts.asStateFlow()
 
@@ -61,6 +73,15 @@ class DashboardViewModel @Inject constructor(
 
     private val _rssiHistory = MutableStateFlow<List<Float>>(emptyList())
     val rssiHistory: StateFlow<List<Float>> = _rssiHistory.asStateFlow()
+
+    private val _phoneRssiHistory = MutableStateFlow<List<Float>>(emptyList())
+    val phoneRssiHistory: StateFlow<List<Float>> = _phoneRssiHistory.asStateFlow()
+
+    private val _node1RssiHistory = MutableStateFlow<List<Float>>(emptyList())
+    val node1RssiHistory: StateFlow<List<Float>> = _node1RssiHistory.asStateFlow()
+
+    private val _node2RssiHistory = MutableStateFlow<List<Float>>(emptyList())
+    val node2RssiHistory: StateFlow<List<Float>> = _node2RssiHistory.asStateFlow()
 
     private var monitoringJob: Job? = null
 
@@ -120,12 +141,42 @@ class DashboardViewModel @Inject constructor(
                     if (rssiList.isNotEmpty()) {
                         // Clear the WiFi warning as soon as we get real data
                         if (_noWifiAtStart.value) _noWifiAtStart.value = false
-                        val avgRssi = rssiList.map { it.rssi }.average().toFloat()
-                        _signalStrength.value = avgRssi
-                        val history = _rssiHistory.value.toMutableList()
-                        history.add(avgRssi)
-                        if (history.size > 120) history.removeAt(0)
-                        _rssiHistory.value = history
+                    }
+
+                    val phoneReadings = mutableListOf<Float>()
+                    var node1Reading: Float? = null
+                    var node2Reading: Float? = null
+
+                    rssiList.forEach { sample ->
+                        when (parseRuViewNodeId(sample.bssid)) {
+                            1 -> node1Reading = sample.rssi.toFloat()
+                            2 -> node2Reading = sample.rssi.toFloat()
+                            else -> phoneReadings.add(sample.rssi.toFloat())
+                        }
+                    }
+
+                    val phoneReading = if (phoneReadings.isNotEmpty()) {
+                        phoneReadings.average().toFloat()
+                    } else {
+                        null
+                    }
+
+                    _phoneSignalStrength.value = phoneReading
+                    _node1SignalStrength.value = node1Reading
+                    _node2SignalStrength.value = node2Reading
+
+                    appendToHistory(_phoneRssiHistory, phoneReading)
+                    appendToHistory(_node1RssiHistory, node1Reading)
+                    appendToHistory(_node2RssiHistory, node2Reading)
+
+                    val liveReadings = listOfNotNull(phoneReading, node1Reading, node2Reading)
+                    _activeSourceCount.value = liveReadings.size
+                    if (liveReadings.isNotEmpty()) {
+                        val fusedRssi = liveReadings.average().toFloat()
+                        _signalStrength.value = fusedRssi
+                        appendToHistory(_rssiHistory, fusedRssi)
+                    } else {
+                        _signalStrength.value = 0f
                     }
                 }
             }
@@ -161,7 +212,14 @@ class DashboardViewModel @Inject constructor(
         _activityType.value = ActivityType.UNKNOWN
         _confidence.value = 0f
         _signalStrength.value = 0f
+        _phoneSignalStrength.value = null
+        _node1SignalStrength.value = null
+        _node2SignalStrength.value = null
+        _activeSourceCount.value = 0
         _rssiHistory.value = emptyList()
+        _phoneRssiHistory.value = emptyList()
+        _node1RssiHistory.value = emptyList()
+        _node2RssiHistory.value = emptyList()
 
         // Stop the detection engine so it can be re-started fresh
         presenceDetector.stop()
@@ -209,5 +267,26 @@ class DashboardViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         stopMonitoring()
+    }
+
+    private fun appendToHistory(
+        target: MutableStateFlow<List<Float>>,
+        reading: Float?
+    ) {
+        if (reading == null) return
+        val history = target.value.toMutableList()
+        history.add(reading)
+        if (history.size > MAX_HISTORY_POINTS) history.removeAt(0)
+        target.value = history
+    }
+
+    private fun parseRuViewNodeId(bssid: String): Int? {
+        val prefix = "ruview-node-"
+        if (!bssid.startsWith(prefix)) return null
+        return bssid.removePrefix(prefix).toIntOrNull()
+    }
+
+    companion object {
+        private const val MAX_HISTORY_POINTS = 120
     }
 }

@@ -53,6 +53,7 @@ import com.waveguard.data.model.AlertEvent
 import com.waveguard.data.model.AlertType
 import com.waveguard.data.model.PresenceState
 import com.waveguard.ui.components.PresenceIndicator
+import com.waveguard.ui.components.SignalSeries
 import com.waveguard.ui.components.SignalStrengthGraph
 import com.waveguard.ui.theme.AmberWarning
 import com.waveguard.ui.theme.CardDark
@@ -78,10 +79,17 @@ fun DashboardScreen(
     val presenceState by viewModel.presenceState.collectAsStateWithLifecycle()
     val activityType by viewModel.activityType.collectAsStateWithLifecycle()
     val signalStrength by viewModel.signalStrength.collectAsStateWithLifecycle()
+    val phoneSignalStrength by viewModel.phoneSignalStrength.collectAsStateWithLifecycle()
+    val node1SignalStrength by viewModel.node1SignalStrength.collectAsStateWithLifecycle()
+    val node2SignalStrength by viewModel.node2SignalStrength.collectAsStateWithLifecycle()
+    val activeSourceCount by viewModel.activeSourceCount.collectAsStateWithLifecycle()
     val recentAlerts by viewModel.recentAlerts.collectAsStateWithLifecycle()
     val confidence by viewModel.confidence.collectAsStateWithLifecycle()
     val isMonitoring by viewModel.isMonitoring.collectAsStateWithLifecycle()
     val rssiHistory by viewModel.rssiHistory.collectAsStateWithLifecycle()
+    val phoneRssiHistory by viewModel.phoneRssiHistory.collectAsStateWithLifecycle()
+    val node1RssiHistory by viewModel.node1RssiHistory.collectAsStateWithLifecycle()
+    val node2RssiHistory by viewModel.node2RssiHistory.collectAsStateWithLifecycle()
     val calibrationProgress by viewModel.calibrationProgress.collectAsStateWithLifecycle()
     val calibrationSampleCount by viewModel.calibrationSampleCount.collectAsStateWithLifecycle()
     val calibrationFailed by viewModel.calibrationFailed.collectAsStateWithLifecycle()
@@ -271,7 +279,19 @@ fun DashboardScreen(
                     presenceState = presenceState,
                     activityType = activityType,
                     signalStrength = signalStrength,
+                    activeSourceCount = activeSourceCount,
                     onRecalibrate = onNavigateToCalibration
+                )
+            }
+
+            // Live source telemetry
+            item {
+                LiveSourceStatusCard(
+                    isMonitoring = isMonitoring,
+                    phoneSignalStrength = phoneSignalStrength,
+                    node1SignalStrength = node1SignalStrength,
+                    node2SignalStrength = node2SignalStrength,
+                    activeSourceCount = activeSourceCount
                 )
             }
 
@@ -289,7 +309,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Signal Strength",
+                                text = "Live Sensing Visualization",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TextPrimary
                             )
@@ -302,9 +322,32 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         SignalStrengthGraph(
                             rssiHistory = rssiHistory,
+                            extraSeries = listOf(
+                                SignalSeries(
+                                    name = "Phone",
+                                    values = phoneRssiHistory,
+                                    color = CyanActive
+                                ),
+                                SignalSeries(
+                                    name = "Node 1",
+                                    values = node1RssiHistory,
+                                    color = GreenSafe
+                                ),
+                                SignalSeries(
+                                    name = "Node 2",
+                                    values = node2RssiHistory,
+                                    color = AmberWarning
+                                )
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(140.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        SourceLegendRow(
+                            phoneSignalStrength = phoneSignalStrength,
+                            node1SignalStrength = node1SignalStrength,
+                            node2SignalStrength = node2SignalStrength
                         )
                     }
                 }
@@ -358,6 +401,7 @@ private fun RoomStatusRow(
     presenceState: PresenceState,
     activityType: ActivityType,
     signalStrength: Float,
+    activeSourceCount: Int,
     onRecalibrate: () -> Unit
 ) {
     Row(
@@ -421,8 +465,164 @@ private fun RoomStatusRow(
                     color = CyanActive,
                     fontWeight = FontWeight.Medium
                 )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "$activeSourceCount / 3 sources",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun LiveSourceStatusCard(
+    isMonitoring: Boolean,
+    phoneSignalStrength: Float?,
+    node1SignalStrength: Float?,
+    node2SignalStrength: Float?,
+    activeSourceCount: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardDark),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Live Source Health",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = if (isMonitoring) "$activeSourceCount / 3 online" else "Monitoring off",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isMonitoring && activeSourceCount > 0) GreenSafe else TextSecondary
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SourceSignalTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Phone",
+                    emoji = "\uD83D\uDCF1",
+                    color = CyanActive,
+                    reading = phoneSignalStrength
+                )
+                SourceSignalTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Node 1",
+                    emoji = "1️⃣",
+                    color = GreenSafe,
+                    reading = node1SignalStrength
+                )
+                SourceSignalTile(
+                    modifier = Modifier.weight(1f),
+                    title = "Node 2",
+                    emoji = "2️⃣",
+                    color = AmberWarning,
+                    reading = node2SignalStrength
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceSignalTile(
+    modifier: Modifier = Modifier,
+    title: String,
+    emoji: String,
+    color: Color,
+    reading: Float?
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = emoji, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = reading?.let { "${it.toInt()} dBm" } ?: "-- dBm",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (reading != null) color else TextSecondary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .background(
+                            color = if (reading != null) color else TextSecondary.copy(alpha = 0.5f),
+                            shape = MaterialTheme.shapes.extraSmall
+                        )
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = if (reading != null) "Live" else "Waiting",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceLegendRow(
+    phoneSignalStrength: Float?,
+    node1SignalStrength: Float?,
+    node2SignalStrength: Float?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        LegendItem("Phone", CyanActive, phoneSignalStrength)
+        LegendItem("Node 1", GreenSafe, node1SignalStrength)
+        LegendItem("Node 2", AmberWarning, node2SignalStrength)
+    }
+}
+
+@Composable
+private fun LegendItem(
+    label: String,
+    color: Color,
+    reading: Float?
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(color = color, shape = MaterialTheme.shapes.extraSmall)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = "$label: ${reading?.let { "${it.toInt()} dBm" } ?: "--"}",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSecondary
+        )
     }
 }
 
