@@ -91,6 +91,7 @@ WaveGuard never captures images or audio. All signal processing stays on-device.
 
 - 📱 **Zero additional hardware** — runs entirely on an Android smartphone
 - 📡 **RSSI scanning** — continuously monitors received signal strength from surrounding APs
+- 🧩 **Multi-node fusion (optional)** — can ingest RuView node telemetry (node-1/node-2) plus phone RSSI
 - 🧭 **Sensor fusion** — combines RSSI variance with accelerometer and gyroscope data to suppress false positives
 - 🔋 **Battery-efficient** — adaptive scan intervals (500 ms active → 5 s idle)
 - 📊 **Live dashboard** — real-time signal chart with presence confidence meter

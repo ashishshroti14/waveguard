@@ -7,6 +7,7 @@ import com.waveguard.data.model.CsiData
 import com.waveguard.data.model.RssiData
 import com.waveguard.data.remote.EspCsiReceiver
 import com.waveguard.data.remote.RssiScanner
+import com.waveguard.data.remote.RuViewNodeReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,7 +15,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -33,6 +36,7 @@ private const val TAG = "SensorRepository"
 class SensorRepository @Inject constructor(
     private val espCsiReceiver: EspCsiReceiver,
     private val rssiScanner: RssiScanner,
+    private val ruViewNodeReceiver: RuViewNodeReceiver,
     private val csiDao: CsiDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -64,9 +68,14 @@ class SensorRepository @Inject constructor(
 
     /**
      * Hot shared flow of Wi-Fi RSSI scan results.  Each emission contains all visible APs from
-     * the most recent scan.
+     * the most recent scan, fused with external RuView node feeds (if enabled).
      */
-    val rssiData: Flow<List<RssiData>> = rssiScanner.rssiFlow
+    val rssiData: Flow<List<RssiData>> = combine(
+        rssiScanner.rssiFlow.onStart { emit(emptyList()) },
+        ruViewNodeReceiver.nodeRssiFlow.onStart { emit(emptyList()) }
+    ) { phoneRssi, nodeRssi ->
+        mergeRssiSources(phoneRssi, nodeRssi)
+    }
         .catch { e -> Log.e(TAG, "RSSI flow error", e) }
         .shareIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000))
 
@@ -81,6 +90,16 @@ class SensorRepository @Inject constructor(
             val cutoff = System.currentTimeMillis() - RETENTION_MS
             csiDao.deleteOlderThan(cutoff)
         }
+    }
+
+    private fun mergeRssiSources(
+        phoneRssi: List<RssiData>,
+        nodeRssi: List<RssiData>
+    ): List<RssiData> {
+        val merged = linkedMapOf<String, RssiData>()
+        phoneRssi.forEach { merged[it.bssid] = it }
+        nodeRssi.forEach { merged[it.bssid] = it }
+        return merged.values.toList()
     }
 
     private fun CsiData.toEntity() = CsiDataEntity(

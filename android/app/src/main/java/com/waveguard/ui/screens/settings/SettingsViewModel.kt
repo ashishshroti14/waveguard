@@ -24,6 +24,9 @@ private const val KEY_SENSITIVITY = "sensitivity_level"
 private const val KEY_NOTIFICATIONS = "notifications_enabled"
 private const val KEY_FALL_ALERT = "fall_alert_enabled"
 private const val KEY_PRESENCE_ALERT = "presence_alert_enabled"
+private const val KEY_REMOTE_NODES_ENABLED = "remote_nodes_enabled"
+private const val KEY_REMOTE_NODES_BASE_URL = "remote_nodes_base_url"
+private const val DEFAULT_REMOTE_NODES_BASE_URL = "http://192.168.0.100:3000"
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -47,6 +50,17 @@ class SettingsViewModel @Inject constructor(
 
     private val _presenceAlertEnabled = MutableStateFlow(prefs.getBoolean(KEY_PRESENCE_ALERT, true))
     val presenceAlertEnabled: StateFlow<Boolean> = _presenceAlertEnabled.asStateFlow()
+
+    private val _remoteNodesEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_REMOTE_NODES_ENABLED, true)
+    )
+    val remoteNodesEnabled: StateFlow<Boolean> = _remoteNodesEnabled.asStateFlow()
+
+    private val _remoteNodesBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_REMOTE_NODES_BASE_URL, DEFAULT_REMOTE_NODES_BASE_URL)
+            ?: DEFAULT_REMOTE_NODES_BASE_URL
+    )
+    val remoteNodesBaseUrl: StateFlow<String> = _remoteNodesBaseUrl.asStateFlow()
 
     fun updateDetectionMode(mode: String) {
         viewModelScope.launch {
@@ -81,6 +95,22 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _presenceAlertEnabled.value = enabled
             prefs.edit().putBoolean(KEY_PRESENCE_ALERT, enabled).apply()
+        }
+    }
+
+    fun updateRemoteNodesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            _remoteNodesEnabled.value = enabled
+            prefs.edit().putBoolean(KEY_REMOTE_NODES_ENABLED, enabled).apply()
+        }
+    }
+
+    fun updateRemoteNodesBaseUrl(url: String) {
+        viewModelScope.launch {
+            _remoteNodesBaseUrl.value = url
+            prefs.edit()
+                .putString(KEY_REMOTE_NODES_BASE_URL, url.trim().ifEmpty { DEFAULT_REMOTE_NODES_BASE_URL })
+                .apply()
         }
     }
 }

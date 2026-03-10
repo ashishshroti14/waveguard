@@ -22,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -57,6 +58,8 @@ fun SettingsScreen(
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val fallAlertEnabled by viewModel.fallAlertEnabled.collectAsStateWithLifecycle()
     val presenceAlertEnabled by viewModel.presenceAlertEnabled.collectAsStateWithLifecycle()
+    val remoteNodesEnabled by viewModel.remoteNodesEnabled.collectAsStateWithLifecycle()
+    val remoteNodesBaseUrl by viewModel.remoteNodesBaseUrl.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = NavyBackground,
@@ -134,6 +137,48 @@ fun SettingsScreen(
                             text = "⚠  Requires ESP32 sensor hardware.",
                             style = MaterialTheme.typography.bodySmall,
                             color = AmberWarning
+                        )
+                    }
+                }
+            }
+
+            // External nodes section
+            SettingsSectionHeader(title = "External Node Feed")
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CardDark),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    ToggleSettingRow(
+                        title = "Use RuView Node Data",
+                        subtitle = "Fuse node-1/node-2 telemetry with phone RSSI",
+                        checked = remoteNodesEnabled,
+                        onCheckedChange = { viewModel.updateRemoteNodesEnabled(it) }
+                    )
+                    HorizontalDivider(color = SurfaceDark, modifier = Modifier.padding(horizontal = 16.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "RuView Base URL",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (remoteNodesEnabled) TextPrimary else TextSecondary
+                        )
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = remoteNodesBaseUrl,
+                            onValueChange = { viewModel.updateRemoteNodesBaseUrl(it) },
+                            enabled = remoteNodesEnabled,
+                            singleLine = true,
+                            placeholder = { Text("http://192.168.0.100:3000") }
+                        )
+                        Text(
+                            text = "WaveGuard polls /api/v1/sensing/latest and keeps recent node telemetry.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
                         )
                     }
                 }

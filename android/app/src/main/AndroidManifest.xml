@@ -33,6 +33,7 @@
         android:icon="@drawable/ic_waveguard"
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_waveguard"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.WaveGuard">
 
