@@ -91,7 +91,8 @@ class RuViewNodeReceiver @Inject constructor(
                     now - sample.timestamp > NODE_STALE_MS
                 }
 
-                if (latestTelemetry != null && now - latestTelemetry.timestamp > TELEMETRY_STALE_MS) {
+                val telemetrySnapshot = latestTelemetry
+                if (telemetrySnapshot != null && now - telemetrySnapshot.timestamp > TELEMETRY_STALE_MS) {
                     latestTelemetry = null
                 }
 
